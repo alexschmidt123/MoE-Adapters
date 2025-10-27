@@ -1,0 +1,21 @@
+# Expert Configuration for MoE-Adapters with Graph Mixer
+# 
+# This config controls the number of experts and graph mixing behavior.
+# Designed to make N (num_experts) easily configurable while keeping k (top_k) fixed at 2.
+
+# Number of experts (N) - easily changeable for experiments
+num_experts: 4
+
+# Top-k selection (k) - keep at 2 for standard setup
+top_k: 2
+
+# Graph-over-Experts (GoE) Mixer Settings
+graph_mixer_enabled: true        # Enable graph mixer for inactive expert contribution
+graph_symmetrize: true           # Symmetrize adjacency matrix A
+graph_add_self_loop: true        # Add self-loops to adjacency matrix
+graph_alpha_init: 0.0            # Initial alpha (0.0 = baseline MoE behavior at init)
+graph_entropy_weight: 0.0        # Entropy regularization weight on A (0.0 = no regularization)
+
+# Additional expert parameters (if needed)
+ffn_bottleneck: 64              # Bottleneck dimension for adapter experts
+
