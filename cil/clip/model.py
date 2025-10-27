@@ -288,73 +288,69 @@ class ResidualAttentionBlock(nn.Module):
         self.is_train = global_is_train
         self.step = 1
         
-        # === Config-driven expert parameters ===
-        # Use cfg if provided, else use defaults for backward compatibility
-        if cfg is not None and hasattr(cfg, 'experts'):
-            self.experts_num = cfg.experts.num_experts
-            self.top_k = cfg.experts.top_k
-            self.ffn_num = getattr(cfg.experts, 'ffn_bottleneck', 64)
-            self.graph_mixer_enabled = getattr(cfg.experts, 'graph_mixer_enabled', True)
-            graph_alpha_init = getattr(cfg.experts, 'graph_alpha_init', 0.0)
-            self.graph_entropy_weight = getattr(cfg.experts, 'graph_entropy_weight', 0.0)
+        # Read MoE config (backward compatible with defaults)
+        if cfg is not None and hasattr(cfg, 'model'):
+            self.experts_num = getattr(cfg.model, 'num_experts', 2)
+            self.top_k = getattr(cfg.model, 'top_k', 2)
         else:
-            # Default values for backward compatibility
             self.experts_num = 2
             self.top_k = 2
-            self.ffn_num = 64
-            self.graph_mixer_enabled = False
-            graph_alpha_init = 0.0
-            self.graph_entropy_weight = 0.0
-        
+            
+        self.ffn_num = 64
         self.softmax = nn.Softmax(1)
         self.softplus = nn.Softplus()
         self.noisy_gating = True
         self.adaptmlp_list = nn.ModuleList()
         self.text_or_image = text_or_image
-        
-        # Initialize expert selection tracking
         if text_or_image == 'text':
-            print(f'text transformer: k={self.top_k}, n={self.experts_num} experts')
+            print('text transformer')
             self.choose_map_text = torch.zeros([self.experts_num])
         else:
-            print(f'image transformer: k={self.top_k}, n={self.experts_num} experts')
+            print('image transformer')
             self.choose_map_image = torch.zeros([self.experts_num])
-        
-        # Router parameters
         self.router_list = nn.ParameterList()
         self.w_noise_list = nn.ParameterList()
         for i in range(self.step):
             self.router_list.append(nn.Parameter(torch.zeros(d_model, self.experts_num), requires_grad=True))
             self.w_noise_list.append(nn.Parameter(torch.zeros(d_model, self.experts_num), requires_grad=True))
-        
-        # Create expert adapters
-        for i in range(self.experts_num):
-            self.adaptmlp = Adapter(
-                d_model=d_model,
-                dropout=0.1,
-                bottleneck=self.ffn_num,
-                init_option='lora',
-                adapter_scalar=0.1,
-                adapter_layernorm_option='none',
-            )
+        for i in range(self.experts_num):  #
+            self.adaptmlp = Adapter(d_model=d_model, dropout=0.1, bottleneck=self.ffn_num,
+                                    init_option='lora',
+                                    adapter_scalar=0.1,
+                                    adapter_layernorm_option='none',
+                                    )
             self.adaptmlp_list.append(self.adaptmlp)
-        
-        # === Graph-over-Experts Mixer ===
-        if self.graph_mixer_enabled:
-            from continual_clip.graph_mixer import GraphExpertMixer
-            self.graph_mixer = GraphExpertMixer(
-                d_model=d_model,
-                num_experts=self.experts_num,
-                symmetrize=getattr(cfg.experts if cfg and hasattr(cfg, 'experts') else type('obj', (object,), {'graph_symmetrize': True})(), 'graph_symmetrize', True),
-                add_self_loop=getattr(cfg.experts if cfg and hasattr(cfg, 'experts') else type('obj', (object,), {'graph_add_self_loop': True})(), 'graph_add_self_loop', True),
-            )
-            self.alpha_graph = nn.Parameter(torch.tensor(graph_alpha_init, dtype=torch.float32))
+
+        # Graph-over-Experts (GoE) mixer configuration
+        if cfg is not None and hasattr(cfg, 'model'):
+            self.graph_enabled = getattr(cfg.model, 'graph_mixer_enabled', False)
+            if self.graph_enabled:
+                # Import here to avoid circular dependency issues
+                from ..graph_mixer import GraphExpertMixer
+                self.graph_mixer = GraphExpertMixer(
+                    d_model=d_model,
+                    num_experts=self.experts_num,
+                    symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
+                    add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
+                )
+                self.alpha_graph = nn.Parameter(
+                    torch.tensor(float(getattr(cfg.model, 'graph_alpha_init', 0.0)))
+                )
+                self.graph_entropy_weight = float(getattr(cfg.model, 'graph_entropy_weight', 0.0))
+            else:
+                self.graph_mixer = None
+                self.alpha_graph = None
+                self.graph_entropy_weight = 0.0
         else:
+            self.graph_enabled = False
             self.graph_mixer = None
             self.alpha_graph = None
+            self.graph_entropy_weight = 0.0
         
-        # Extra losses accumulator (for graph regularization)
-        self._extra_losses = 0.0
+        # Attribute to accumulate extra losses (e.g., entropy regularization)
+        self.extra_losses = None
+        
+        # self.taskid = None
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
@@ -458,21 +454,12 @@ class ResidualAttentionBlock(nn.Module):
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
         if global_taskid is not None:
-            # === Prepare pooled features for routing ===
-            # x shape: [L, B, D]
-            L, B, D = x.shape
-            x_bt = x.permute(1, 0, 2)  # [B, L, D]
-            x_re = x_bt[:, 0, :]  # [B, D] - use first token (CLS)
-            
-            # === Standard MoE Routing (unchanged) ===
-            gates, load = self.noisy_top_k_gating(
-                x_re, self.is_train,
-                self.router_list[global_taskid],
-                self.w_noise_list[global_taskid]
-            )
+            # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
+            x_re = x.permute(1, 0, 2)[:, 0, :]  # Use CLS token: [B, D]
+            gates, load = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
+                                                  self.w_noise_list[global_taskid])
             importance = gates.sum(0)
 
-            # Track expert selection
             nonzero_indices = torch.nonzero(gates)
             counter = Counter(nonzero_indices[:, 1].tolist())
             for number, count in counter.items():
@@ -480,17 +467,11 @@ class ResidualAttentionBlock(nn.Module):
                     self.choose_map_text[number] = self.choose_map_text[number] + count
                 else:
                     self.choose_map_image[number] = self.choose_map_image[number] + count
-            
-            # === MoE Expert Dispatch and Combine (unchanged) ===
             dispatcher = SparseDispatcher(self.experts_num, gates)
             expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))
-            expert_outputs = [
-                self.adaptmlp_list[i](
-                    expert_inputs[i].view(expert_inputs[i].shape[0], x.shape[0], x.shape[2]).to(x),
-                    add_residual=False
-                )
-                for i in range(self.experts_num)
-            ]
+            expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
+                                                                          x.shape[0], x.shape[2]).to(x), add_residual=False)
+                              for i in range(self.experts_num)]
 
             i = 0
             while i < len(expert_outputs):
@@ -500,32 +481,39 @@ class ResidualAttentionBlock(nn.Module):
                     expert_outputs[i] = expert_outputs[i].view(expert_outputs[i].shape[0], -1)
                     i += 1
 
+            # Standard MoE combine
             y_moe = dispatcher.combine(expert_outputs)
             y_moe = y_moe.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
-            y_moe = y_moe.permute(1, 0, 2)  # [L, B, D]
             
-            # === Graph-over-Experts Mixer Path ===
-            if self.graph_mixer_enabled and self.graph_mixer is not None:
-                # Compute graph mixer output
-                A, X_all, Y_all = self.graph_mixer(x_re)  # [B, N, N], [B, N, D], [B, N, D]
+            # Graph-over-Experts path (if enabled)
+            if self.graph_enabled and self.graph_mixer is not None:
+                # Compute graph mixing using the same pooled representation
+                A, X_all, Y_all = self.graph_mixer(x_re)  # A: [B,N,N], X_all: [B,N,D], Y_all: [B,N,D]
                 
-                # Optional: entropy regularization on adjacency
-                if self.graph_entropy_weight > 0.0 and self.is_train:
-                    entropy_loss = self.graph_mixer.compute_entropy_loss(A)
-                    self._extra_losses = self._extra_losses + self.graph_entropy_weight * entropy_loss
+                # Fuse graph messages using the same gates from router
+                # y_graph[b] = sum_e gates[b,e] * Y_all[b,e]
+                y_graph = torch.einsum("bn,bnd->bd", gates, Y_all)  # [B, D]
                 
-                # Aggregate graph outputs using gates: y_graph[b] = sum_e gates[b,e] * Y_all[b,e]
-                y_graph = torch.einsum('bn,bnd->bd', gates, Y_all)  # [B, D]
-                y_graph = y_graph.unsqueeze(1).expand(-1, L, -1)  # [B, L, D]
-                y_graph = y_graph.permute(1, 0, 2)  # [L, B, D]
+                # Broadcast over sequence length
+                y_graph = y_graph.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
                 
-                # Combine MoE and graph outputs
-                y_total = y_moe + self.alpha_graph * y_graph
+                # Add graph contribution with learnable weight
+                y_fused = y_moe + self.alpha_graph * y_graph
+                
+                # Optional entropy regularization on adjacency matrix
+                if self.graph_entropy_weight > 0 and self.is_train:
+                    # Row entropy: -sum(p * log(p)) per row, averaged over batch and rows
+                    p = A.clamp_min(1e-9)
+                    row_entropy = -(p * p.log()).sum(dim=-1).mean()
+                    # Accumulate extra loss (will be added in training loop)
+                    if self.extra_losses is None:
+                        self.extra_losses = self.graph_entropy_weight * row_entropy
+                    else:
+                        self.extra_losses = self.extra_losses + self.graph_entropy_weight * row_entropy
             else:
-                y_total = y_moe
+                y_fused = y_moe
             
-            # Final residual connection
-            x = x + self.mlp(self.ln_2(x)) + y_total
+            x = x + self.mlp(self.ln_2(x)) + y_fused.permute(1, 0, 2)
         else:
             x = x + self.mlp(self.ln_2(x))
         return x

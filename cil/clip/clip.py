@@ -196,8 +196,8 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
         The device to put the loaded model
     jit : bool
         Whether to load the optimized JIT model (default) or more hackable non-JIT model.
-    cfg : DictConfig
-        Configuration object containing expert settings
+    cfg : OmegaConf (optional)
+        Configuration object for Graph-over-Experts and other settings
     Returns
     -------
     model : torch.nn.Module

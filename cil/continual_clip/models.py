@@ -25,7 +25,6 @@ class ClassIncremental(nn.Module):
         super().__init__()
         self.prompt_template = cfg.prompt_template
         self.device = device
-        self.cfg = cfg
         self.classes_names = None
         self.model, self.transforms, _ = clip.load(cfg.model_name, device=device, jit=jit, cfg=cfg)
         self.ref_model = None
@@ -68,15 +67,15 @@ class ClassIncremental(nn.Module):
 
         # 冻结参数
         for k, v in self.model.named_parameters():  # 冻结其他参数
-            if "adaptmlp" not in k and "router" not in k and "noise" not in k:
+            if "adaptmlp" not in k and "router" not in k and "noise" not in k and "graph_mixer" not in k and "alpha_graph" not in k:
                 v.requires_grad = False
 
 
         params = [
-            v for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k
+            v for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k or "graph_mixer" in k or "alpha_graph" in k
         ]
         params_name = [
-            k for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k
+            k for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k or "graph_mixer" in k or "alpha_graph" in k
         ]
         # print('========trainable params============', params_name)
 
@@ -124,25 +123,24 @@ class ClassIncremental(nn.Module):
 
             inputs, targets = inputs.cuda(), targets.cuda()
 
-            logits_per_image, _ = self.model(inputs, texts, 0, is_train=True)
+            logits_per_image, _ = self.model(inputs, texts, 0, is_train=True)  # 分开
             # -- cross entropy loss --
             loss = F.cross_entropy(logits_per_image, targets, label_smoothing=cfg.ls)
             
-            # === Add graph mixer extra losses if present ===
-            loss_total = loss
-            if hasattr(self.model, 'visual') and hasattr(self.model.visual, 'transformer'):
-                for block in self.model.visual.transformer.resblocks:
-                    if hasattr(block, '_extra_losses') and block._extra_losses != 0:
-                        loss_total = loss_total + block._extra_losses
-                        block._extra_losses = 0.0
-            if hasattr(self.model, 'transformer'):
-                for block in self.model.transformer.resblocks:
-                    if hasattr(block, '_extra_losses') and block._extra_losses != 0:
-                        loss_total = loss_total + block._extra_losses
-                        block._extra_losses = 0.0
+            # Add extra losses from graph mixer (if any)
+            # Collect extra losses from all ResidualAttentionBlocks
+            extra_loss = 0.0
+            for module in self.model.modules():
+                if hasattr(module, 'extra_losses') and module.extra_losses is not None:
+                    extra_loss = extra_loss + module.extra_losses
+                    # Reset for next iteration
+                    module.extra_losses = None
+            
+            if extra_loss != 0.0:
+                loss = loss + extra_loss
             
             optimizer.zero_grad()
-            loss_total.backward()
+            loss.backward()
             optimizer.step()
 
 

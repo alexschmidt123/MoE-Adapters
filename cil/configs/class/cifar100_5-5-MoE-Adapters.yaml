@@ -1,6 +1,3 @@
-defaults:
-  - /experts@experts: experts
-
 hydra:
   run:
     dir: ./experiments/${scenario}/${dataset}_${initial_increment}-${increment}-${method}

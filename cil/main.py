@@ -24,21 +24,6 @@ def continual_clip(cfg: DictConfig) -> None:
     cfg.dataset_root = os.path.join(cfg.workdir, cfg.dataset_root)
 
     utils.save_config(cfg)
-    
-    # === Configuration Logging ===
-    if hasattr(cfg, 'experts'):
-        print(f"\n{'='*60}")
-        print(f"Configuration: k={cfg.experts.top_k}, n={cfg.experts.num_experts} experts")
-        if cfg.experts.graph_mixer_enabled:
-            print(f"Graph Mixer: ENABLED")
-            print(f"  - Symmetrize: {cfg.experts.graph_symmetrize}")
-            print(f"  - Self-loops: {cfg.experts.graph_add_self_loop}")
-            print(f"  - Alpha init: {cfg.experts.graph_alpha_init}")
-            print(f"  - Entropy weight: {cfg.experts.graph_entropy_weight}")
-        else:
-            print(f"Graph Mixer: DISABLED (baseline MoE)")
-        print(f"{'='*60}\n")
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg.class_order = utils.get_class_order(os.path.join(cfg.workdir, cfg.class_order))
     model  = load_model(cfg, device)
