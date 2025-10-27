@@ -1,0 +1,19 @@
+# Configuration for CIFAR-100 with 4 experts (N=4, k=2)
+# Baseline for fair comparison with GoE
+# NO graph mixer - standard MoE only
+
+defaults:
+  - cifar100_2-2-MoE-Adapters
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4"
+
+# Model configuration - same number of experts as GoE, but no graph
+model:
+  num_experts: 4           # N=4 experts (same as GoE)
+  top_k: 2                 # k=2 (same as GoE)
+  
+  # Graph mixer DISABLED (this is the baseline)
+  graph_mixer_enabled: false
+
