@@ -4,6 +4,12 @@
 
 set -e
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Change to the cil directory
+cd "$SCRIPT_DIR"
+
 CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path configs/class \
     --config-name cifar100_2-2-MoE-Adapters-GoE.yaml \
