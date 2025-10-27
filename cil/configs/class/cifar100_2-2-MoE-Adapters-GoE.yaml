@@ -3,6 +3,7 @@
 
 defaults:
   - cifar100_2-2-MoE-Adapters
+  - _self_
 
 # Model configuration for Graph-over-Experts
 model:

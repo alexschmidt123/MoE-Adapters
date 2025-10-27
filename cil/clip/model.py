@@ -326,8 +326,9 @@ class ResidualAttentionBlock(nn.Module):
             self.graph_enabled = getattr(cfg.model, 'graph_mixer_enabled', False)
             if self.graph_enabled:
                 # Import here to avoid circular dependency issues
-                from ..graph_mixer import GraphExpertMixer
-                self.graph_mixer = GraphExpertMixer(
+                # Use absolute import since script runs from cil/ directory
+                import graph_mixer
+                self.graph_mixer = graph_mixer.GraphExpertMixer(
                     d_model=d_model,
                     num_experts=self.experts_num,
                     symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
