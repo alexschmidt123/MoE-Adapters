@@ -1,0 +1,18 @@
+# Configuration for CIFAR-100 with 8 experts (N=8, k=2)
+# Baseline for comparison - NO graph mixer, standard MoE only
+
+defaults:
+  - cifar100_2-2-MoE-Adapters
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N8"
+
+# Model configuration - 8 experts, no graph
+model:
+  num_experts: 8           # N=8 experts
+  top_k: 2                 # k=2
+  
+  # Graph mixer DISABLED (this is the baseline)
+  graph_mixer_enabled: false
+

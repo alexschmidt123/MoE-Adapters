@@ -1,0 +1,23 @@
+# Configuration for CIFAR-100 with 2 experts and Graph-over-Experts (GoE) Mixer
+# N=2, k=2, with graph mixer enabled
+
+defaults:
+  - cifar100_2-2-MoE-Adapters
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N2-GoE"
+
+# Model configuration for Graph-over-Experts with 2 experts
+model:
+  # MoE parameters
+  num_experts: 2           # Number of experts (N=2)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Graph mixer settings
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+
