@@ -29,16 +29,25 @@ class GraphExpertMixer(nn.Module):
         d_model: int,
         num_experts: int,
         symmetrize: bool = True,
-        add_self_loop: bool = True
+        add_self_loop: bool = True,
+        use_noisy_adjacency: bool = True,
+        noise_epsilon: float = 0.01
     ):
         super().__init__()
         self.d_model = d_model
         self.num_experts = num_experts
         self.symmetrize = symmetrize
         self.add_self_loop = add_self_loop
+        self.use_noisy_adjacency = use_noisy_adjacency
+        self.noise_epsilon = noise_epsilon
         
         # Adjacency matrix predictor: maps pooled token to N*N logits
         self.A_head = nn.Linear(d_model, num_experts * num_experts)
+        
+        # Noise head for adjacency: learns sample-specific noise variance
+        if self.use_noisy_adjacency:
+            self.adj_noise_head = nn.Linear(d_model, num_experts * num_experts)
+            self.softplus = nn.Softplus()
         
         # Per-expert proto-feature generators (lightweight, no heavy adapters)
         self.proto = nn.ModuleList([
@@ -52,13 +61,15 @@ class GraphExpertMixer(nn.Module):
         
     def forward(
         self, 
-        x_sample: torch.Tensor
+        x_sample: torch.Tensor,
+        is_train: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass of the Graph Expert Mixer.
         
         Args:
             x_sample: Pooled sample representation [B, D]
+            is_train: Whether in training mode (affects noise injection)
             
         Returns:
             A: Adjacency matrix [B, N, N] (row-stochastic after softmax)
@@ -71,6 +82,16 @@ class GraphExpertMixer(nn.Module):
         
         # 1. Predict adjacency logits [B, N*N] -> [B, N, N]
         A_logits = self.A_head(x_sample).view(B, N, N)
+        
+        # 1.5. Add noise to adjacency logits for exploration (only during training)
+        if self.use_noisy_adjacency and is_train:
+            # Predict sample-specific noise variance
+            noise_logits = self.adj_noise_head(x_sample).view(B, N, N)  # [B, N, N]
+            # Apply softplus to ensure positive noise variance, add epsilon for stability
+            noise_stddev = self.softplus(noise_logits) + self.noise_epsilon  # [B, N, N]
+            # Add Gaussian noise to adjacency logits
+            noise = torch.randn_like(A_logits) * noise_stddev
+            A_logits = A_logits + noise
         
         # 2. Optional symmetrization
         if self.symmetrize:

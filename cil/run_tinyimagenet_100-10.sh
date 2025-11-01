@@ -1,9 +1,9 @@
-#!bin/bash
+#!/bin/bash
+# Run TinyImageNet with 10 classes per task (10 tasks total)
 
-# for imagenet-100 dataset; 10 classes/task
-python main.py \
+CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path configs/class \
-    --config-name tinyimagenet_100-5.yaml \
+    --config-name tinyimagenet_100-10.yaml \
     dataset_root="../datasets/" \
     class_order="class_orders/tinyimagenet.yaml"
 

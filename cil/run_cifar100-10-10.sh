@@ -1,6 +1,6 @@
-#!bin/bash
+#!/bin/bash
+# Run CIFAR-100 with 10 classes per task (10 tasks total)
 
-# for imagenet-100 dataset; 10 classes/task
 CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path configs/class \
     --config-name cifar100_10-10-MoE-Adapters.yaml \

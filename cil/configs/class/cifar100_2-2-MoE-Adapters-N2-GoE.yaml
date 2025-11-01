@@ -20,4 +20,8 @@ model:
   graph_add_self_loop: true       # Add self-loops before row normalization
   graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
   graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings (NEW)
+  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
+  graph_noise_epsilon: 0.01        # Base noise level (epsilon)
 

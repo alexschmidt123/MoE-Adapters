@@ -333,6 +333,8 @@ class ResidualAttentionBlock(nn.Module):
                     num_experts=self.experts_num,
                     symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
                     add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
+                    use_noisy_adjacency=getattr(cfg.model, 'graph_use_noisy_adjacency', True),
+                    noise_epsilon=float(getattr(cfg.model, 'graph_noise_epsilon', 0.01)),
                 )
                 self.alpha_graph = nn.Parameter(
                     torch.tensor(float(getattr(cfg.model, 'graph_alpha_init', 0.0)))
@@ -489,7 +491,8 @@ class ResidualAttentionBlock(nn.Module):
             # Graph-over-Experts path (if enabled)
             if self.graph_enabled and self.graph_mixer is not None:
                 # Compute graph mixing using the same pooled representation
-                A, X_all, Y_all = self.graph_mixer(x_re)  # A: [B,N,N], X_all: [B,N,D], Y_all: [B,N,D]
+                # Pass is_train flag for noisy adjacency (noise only during training)
+                A, X_all, Y_all = self.graph_mixer(x_re, is_train=self.is_train)  # A: [B,N,N], X_all: [B,N,D], Y_all: [B,N,D]
                 
                 # Fuse graph messages using the same gates from router
                 # y_graph[b] = sum_e gates[b,e] * Y_all[b,e]
