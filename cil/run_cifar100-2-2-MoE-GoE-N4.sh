@@ -4,7 +4,7 @@
 
 CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path configs/class \
-    --config-name cifar100_2-2-MoE-Adapters-GoE.yaml \
+    --config-name cifar100_2-2-MoE-Adapters-N4-GoE.yaml \
     dataset_root="../datasets/" \
     class_order="class_orders/cifar100.yaml"
 

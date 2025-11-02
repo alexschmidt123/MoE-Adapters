@@ -1,12 +1,12 @@
-# Configuration for CIFAR-100 with Graph-over-Experts (GoE) Mixer
-# Inherits from the base MoE-Adapters config and adds graph mixer parameters
+# Configuration for CIFAR-100 with 4 experts and Graph-over-Experts (GoE) Mixer
+# N=4, k=2, with graph mixer enabled
 
 defaults:
   - cifar100_2-2-MoE-Adapters
   - _self_
 
 # Override method name to create distinct output directory
-method: "MoE-Adapters-GoE"
+method: "MoE-Adapters-N4-GoE"
 
 # Model configuration for Graph-over-Experts
 model:
