@@ -1,17 +1,17 @@
-# Configuration for CIFAR-100 with 8 experts and Graph-over-Experts (GoE) Mixer
-# N=8, k=2, with graph mixer enabled
+# Configuration for CIFAR-100 with 2 experts and Graph-over-Experts (GoE) Mixer
+# N=2, k=2, with graph mixer enabled and noise epsilon=0.001
 
 defaults:
   - cifar100_2-2-MoE-Adapters-N2
   - _self_
 
 # Override method name to create distinct output directory
-method: "MoE-Adapters-N8-GoE"
+method: "MoE-Adapters-N2-GoE-Noise001"
 
-# Model configuration for Graph-over-Experts with 8 experts
+# Model configuration for Graph-over-Experts with 2 experts
 model:
   # MoE parameters
-  num_experts: 8           # Number of experts (N=8)
+  num_experts: 2           # Number of experts (N=2)
   top_k: 2                 # Keep k=2 (standard sparse MoE)
   
   # Graph mixer settings
@@ -22,6 +22,6 @@ model:
   graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
   
   # Noisy adjacency matrix settings
-  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
-  graph_noise_epsilon: 0.0         # Noise epsilon set to zero
+  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
+  graph_noise_epsilon: 0.001      # Base noise level (epsilon = 0.001)
 

@@ -3,7 +3,7 @@ import os
 import json
 import hydra
 import logging
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from tqdm import tqdm
 
@@ -15,6 +15,28 @@ from continuum.metrics import Logger
 from continual_clip import utils
 from continual_clip.models import load_model
 from continual_clip.datasets import build_cl_scenarios
+
+# Register custom resolver to get config name without extension
+# This will be called when Hydra resolves the directory path
+def get_config_name_no_ext():
+    try:
+        # Try to get from HydraConfig if available
+        from hydra.core.hydra_config import HydraConfig
+        cfg = HydraConfig.get()
+        config_name = cfg.job.config_name
+        # Remove .yaml extension if present
+        if config_name.endswith('.yaml'):
+            return config_name[:-5]  # Remove .yaml
+        return config_name
+    except:
+        # Fallback: try to get from environment or use default
+        import os
+        config_name = os.environ.get('HYDRA_CONFIG_NAME', 'experiment')
+        if config_name.endswith('.yaml'):
+            return config_name[:-5]
+        return config_name
+
+OmegaConf.register_new_resolver("config_name_no_ext", get_config_name_no_ext)
 
 
 @hydra.main(config_path=None, config_name=None, version_base="1.1") 

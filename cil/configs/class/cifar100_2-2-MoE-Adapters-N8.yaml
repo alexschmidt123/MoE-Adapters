@@ -2,7 +2,7 @@
 # Baseline for comparison - NO graph mixer, standard MoE only
 
 defaults:
-  - cifar100_2-2-MoE-Adapters
+  - cifar100_2-2-MoE-Adapters-N2
   - _self_
 
 # Override method name to create distinct output directory

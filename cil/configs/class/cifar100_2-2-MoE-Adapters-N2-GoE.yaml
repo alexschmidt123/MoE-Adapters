@@ -2,7 +2,7 @@
 # N=2, k=2, with graph mixer enabled
 
 defaults:
-  - cifar100_2-2-MoE-Adapters
+  - cifar100_2-2-MoE-Adapters-N2
   - _self_
 
 # Override method name to create distinct output directory
@@ -21,7 +21,7 @@ model:
   graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
   graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
   
-  # Noisy adjacency matrix settings (NEW)
-  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
-  graph_noise_epsilon: 0.01        # Base noise level (epsilon)
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
+  graph_noise_epsilon: 0.0         # Noise epsilon set to zero
 
