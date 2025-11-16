@@ -1,0 +1,27 @@
+class_order: class_orders/cifar100.yaml
+dataset_root: ../datasets/
+workdir: ''
+log_path: metrics.json
+model_name: ViT-B/16
+prompt_template: a bad photo of a {}.
+batch_size: 64
+increment: ${initial_increment}
+initial_increment: 2
+scenario: class
+dataset: cifar100
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+method: MoE-Adapters-N2-GoE-Noise001
+lr: 0.001
+ls: 0.0
+model:
+  num_experts: 2
+  top_k: 2
+  graph_mixer_enabled: true
+  graph_symmetrize: true
+  graph_add_self_loop: true
+  graph_alpha_init: 0.0
+  graph_entropy_weight: 0.0
+  graph_use_noisy_adjacency: true
+  graph_noise_epsilon: 0.001
