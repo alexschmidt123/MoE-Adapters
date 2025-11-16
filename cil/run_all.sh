@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run all experiments in configs/class folder (excluding reference folder)
+# Run all N16 and N32 experiments in configs/class folder (excluding reference folder)
 # Each config will be run 3 times
 
 # Get the directory where this script is located
@@ -7,7 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Find all yaml files in configs/class, excluding reference folder
-CONFIG_FILES=$(find configs/class -name "*.yaml" -not -path "*/reference/*" | sort)
+# Filter to only include N16 and N32 experiments
+CONFIG_FILES=$(find configs/class -name "*.yaml" -not -path "*/reference/*" | grep -E "(N16|N32)" | sort)
 
 # Check if any config files found
 if [ -z "$CONFIG_FILES" ]; then
@@ -16,9 +17,9 @@ if [ -z "$CONFIG_FILES" ]; then
 fi
 
 echo "=========================================="
-echo "Running All Experiments"
+echo "Running N16 and N32 Experiments"
 echo "=========================================="
-echo "Found $(echo "$CONFIG_FILES" | wc -l) config files"
+echo "Found $(echo "$CONFIG_FILES" | wc -l) config files (N16 and N32 only)"
 echo "Each will be run 3 times"
 echo "=========================================="
 echo ""
