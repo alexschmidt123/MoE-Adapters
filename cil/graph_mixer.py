@@ -9,7 +9,64 @@ and message passing over expert proto-features.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple
+from typing import Tuple, Optional, List
+
+
+def build_mlp(
+    input_dim: int,
+    output_dim: int,
+    hidden_dims: Optional[List[int]] = None,
+    activation: str = "gelu",
+    use_norm: bool = False,
+    dropout: float = 0.0,
+    bias: bool = True
+) -> nn.Module:
+    """
+    Build a multi-layer perceptron (MLP).
+    
+    Args:
+        input_dim: Input dimension
+        output_dim: Output dimension
+        hidden_dims: List of hidden layer dimensions. If None, creates single layer.
+        activation: Activation function ('gelu', 'relu', 'tanh', 'none')
+        use_norm: Whether to use LayerNorm between layers
+        dropout: Dropout probability
+        bias: Whether to use bias in linear layers
+    
+    Returns:
+        Sequential module representing the MLP
+    """
+    layers = []
+    dims = [input_dim]
+    if hidden_dims:
+        dims.extend(hidden_dims)
+    dims.append(output_dim)
+    
+    # Get activation function
+    if activation.lower() == "gelu":
+        act_fn = nn.GELU()
+    elif activation.lower() == "relu":
+        act_fn = nn.ReLU()
+    elif activation.lower() == "tanh":
+        act_fn = nn.Tanh()
+    elif activation.lower() == "none":
+        act_fn = nn.Identity()
+    else:
+        raise ValueError(f"Unknown activation: {activation}")
+    
+    # Build layers
+    for i in range(len(dims) - 1):
+        layers.append(nn.Linear(dims[i], dims[i + 1], bias=bias))
+        
+        # Add normalization before activation (except for last layer)
+        if i < len(dims) - 2:
+            if use_norm:
+                layers.append(nn.LayerNorm(dims[i + 1]))
+            if dropout > 0:
+                layers.append(nn.Dropout(dropout))
+            layers.append(act_fn)
+    
+    return nn.Sequential(*layers)
 
 
 class GraphExpertMixer(nn.Module):
@@ -31,7 +88,20 @@ class GraphExpertMixer(nn.Module):
         symmetrize: bool = True,
         add_self_loop: bool = True,
         use_noisy_adjacency: bool = True,
-        noise_epsilon: float = 0.01
+        noise_epsilon: float = 0.01,
+        graph_head_layers: Optional[List[int]] = None,
+        graph_head_activation: str = "none",
+        graph_head_use_norm: bool = False,
+        graph_head_dropout: float = 0.0,
+        graph_noise_head_layers: Optional[List[int]] = None,
+        graph_noise_head_activation: str = "none",
+        graph_noise_head_use_norm: bool = False,
+        graph_proto_layers: Optional[List[int]] = None,
+        graph_proto_activation: str = "none",
+        graph_proto_use_norm: bool = False,
+        graph_proj_layers: Optional[List[int]] = None,
+        graph_proj_activation: str = "none",
+        graph_proj_use_norm: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -42,21 +112,53 @@ class GraphExpertMixer(nn.Module):
         self.noise_epsilon = noise_epsilon
         
         # Adjacency matrix predictor: maps pooled token to N*N logits
-        self.A_head = nn.Linear(d_model, num_experts * num_experts)
+        self.A_head = build_mlp(
+            input_dim=d_model,
+            output_dim=num_experts * num_experts,
+            hidden_dims=graph_head_layers,
+            activation=graph_head_activation,
+            use_norm=graph_head_use_norm,
+            dropout=graph_head_dropout,
+            bias=True
+        )
         
         # Noise head for adjacency: learns sample-specific noise variance
         if self.use_noisy_adjacency:
-            self.adj_noise_head = nn.Linear(d_model, num_experts * num_experts)
+            self.adj_noise_head = build_mlp(
+                input_dim=d_model,
+                output_dim=num_experts * num_experts,
+                hidden_dims=graph_noise_head_layers,
+                activation=graph_noise_head_activation,
+                use_norm=graph_noise_head_use_norm,
+                dropout=0.0,
+                bias=True
+            )
             self.softplus = nn.Softplus()
         
         # Per-expert proto-feature generators (lightweight, no heavy adapters)
         self.proto = nn.ModuleList([
-            nn.Linear(d_model, d_model, bias=False) 
+            build_mlp(
+                input_dim=d_model,
+                output_dim=d_model,
+                hidden_dims=graph_proto_layers,
+                activation=graph_proto_activation,
+                use_norm=graph_proto_use_norm,
+                dropout=0.0,
+                bias=False
+            )
             for _ in range(num_experts)
         ])
         
         # Graph message projection and activation
-        self.proj = nn.Linear(d_model, d_model, bias=False)
+        self.proj = build_mlp(
+            input_dim=d_model,
+            output_dim=d_model,
+            hidden_dims=graph_proj_layers,
+            activation=graph_proj_activation,
+            use_norm=graph_proj_use_norm,
+            dropout=0.0,
+            bias=False
+        )
         self.act = nn.GELU()
         
     def forward(

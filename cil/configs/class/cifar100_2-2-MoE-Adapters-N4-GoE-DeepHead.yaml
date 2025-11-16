@@ -1,0 +1,34 @@
+# Configuration for CIFAR-100 with 4 experts and Graph-over-Experts (GoE) Mixer
+# N=4, k=2, with graph mixer enabled and deeper A_head (adjacency predictor)
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-GoE-DeepHead"
+
+# Model configuration for Graph-over-Experts with 4 experts
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Graph mixer settings
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
+  graph_noise_epsilon: 0.0         # Noise epsilon set to zero
+  
+  # Header layer configurations: Deeper A_head (adjacency predictor)
+  # A_head: 3-layer MLP (d_model -> 512 -> 256 -> N*N)
+  graph_head_layers: [512, 256]    # 2 hidden layers
+  graph_head_activation: "gelu"    # GELU activation
+  graph_head_use_norm: true        # Use LayerNorm between layers
+  graph_head_dropout: 0.1          # Dropout for regularization
+

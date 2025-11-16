@@ -328,6 +328,16 @@ class ResidualAttentionBlock(nn.Module):
                 # Import here to avoid circular dependency issues
                 # Use absolute import since script runs from cil/ directory
                 import graph_mixer
+                # Helper to get list from config (None if not present)
+                def get_list_attr(cfg_obj, attr_name, default=None):
+                    val = getattr(cfg_obj, attr_name, default)
+                    if val is None or val == "None":
+                        return None
+                    # Convert OmegaConf list to Python list if needed
+                    if hasattr(val, '__iter__') and not isinstance(val, str):
+                        return list(val)
+                    return val
+                
                 self.graph_mixer = graph_mixer.GraphExpertMixer(
                     d_model=d_model,
                     num_experts=self.experts_num,
@@ -335,6 +345,20 @@ class ResidualAttentionBlock(nn.Module):
                     add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
                     use_noisy_adjacency=getattr(cfg.model, 'graph_use_noisy_adjacency', True),
                     noise_epsilon=float(getattr(cfg.model, 'graph_noise_epsilon', 0.01)),
+                    # Header layer configurations
+                    graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
+                    graph_head_activation=str(getattr(cfg.model, 'graph_head_activation', 'none')),
+                    graph_head_use_norm=bool(getattr(cfg.model, 'graph_head_use_norm', False)),
+                    graph_head_dropout=float(getattr(cfg.model, 'graph_head_dropout', 0.0)),
+                    graph_noise_head_layers=get_list_attr(cfg.model, 'graph_noise_head_layers', None),
+                    graph_noise_head_activation=str(getattr(cfg.model, 'graph_noise_head_activation', 'none')),
+                    graph_noise_head_use_norm=bool(getattr(cfg.model, 'graph_noise_head_use_norm', False)),
+                    graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
+                    graph_proto_activation=str(getattr(cfg.model, 'graph_proto_activation', 'none')),
+                    graph_proto_use_norm=bool(getattr(cfg.model, 'graph_proto_use_norm', False)),
+                    graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
+                    graph_proj_activation=str(getattr(cfg.model, 'graph_proj_activation', 'none')),
+                    graph_proj_use_norm=bool(getattr(cfg.model, 'graph_proj_use_norm', False)),
                 )
                 self.alpha_graph = nn.Parameter(
                     torch.tensor(float(getattr(cfg.model, 'graph_alpha_init', 0.0)))
