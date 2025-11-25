@@ -1,17 +1,17 @@
-# Configuration for CIFAR-100 with 2 experts and Graph-over-Experts (GoE) Mixer
-# N=2, k=2, with graph mixer enabled and deeper A_head (adjacency predictor)
+# Configuration for CIFAR-100 with 8 experts and Graph-over-Experts (GoE) Mixer
+# N=8, k=2, with graph mixer enabled and deeper proto (proto-feature generators)
 
 defaults:
-  - cifar100_2-2-MoE-Adapters-N2
+  - cifar100_2-2-MoE-Adapters-N8
   - _self_
 
 # Override method name to create distinct output directory
-method: "MoE-Adapters-N2-GoE-DeepHead"
+method: "MoE-Adapters-N8-GoE-DeepProto"
 
-# Model configuration for Graph-over-Experts with 2 experts
+# Model configuration for Graph-over-Experts with 8 experts
 model:
   # MoE parameters
-  num_experts: 2           # Number of experts (N=2)
+  num_experts: 8           # Number of experts (N=8)
   top_k: 2                 # Keep k=2 (standard sparse MoE)
   
   # Graph mixer settings
@@ -25,10 +25,9 @@ model:
   graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
   graph_noise_epsilon: 0.0         # Noise epsilon set to zero
   
-  # Header layer configurations: Deeper A_head (adjacency predictor)
-  # A_head: 3-layer MLP (d_model -> 512 -> 256 -> N*N)
-  graph_head_layers: [512, 256]    # 2 hidden layers
-  graph_head_activation: "gelu"    # GELU activation
-  graph_head_use_norm: true        # Use LayerNorm between layers
-  graph_head_dropout: 0.0          # Dropout disabled (was 0.1, may cause training issues)
+  # Header layer configurations: Deeper proto (proto-feature generators)
+  # proto: 2-layer MLP per expert (d_model -> 256 -> d_model)
+  graph_proto_layers: [256]        # 1 hidden layer
+  graph_proto_activation: "gelu"   # GELU activation
+  graph_proto_use_norm: true       # Use LayerNorm between layers
 

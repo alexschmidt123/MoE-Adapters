@@ -58,9 +58,10 @@ class ClassIncremental(nn.Module):
         # print('cfg.batch_size',cfg.batch_size)
 
 
-        EPOCH = 1
+        EPOCH = getattr(cfg, 'epochs', 1)  # Configurable epochs, default to 1 for backward compatibility
         num_batches = len(train_loader)
         total_iterations = EPOCH * num_batches
+        print(f"Training task {task_id}: {EPOCH} epoch(s), {num_batches} batches per epoch, {total_iterations} total iterations")
 
         ### whole-model
         exclude_params_name = ["logit_scale"]

@@ -58,13 +58,14 @@ def build_mlp(
     for i in range(len(dims) - 1):
         layers.append(nn.Linear(dims[i], dims[i + 1], bias=bias))
         
-        # Add normalization before activation (except for last layer)
+        # Add normalization, activation, and dropout (except for last layer)
+        # Standard order: Linear -> LayerNorm -> Activation -> Dropout
         if i < len(dims) - 2:
             if use_norm:
                 layers.append(nn.LayerNorm(dims[i + 1]))
+            layers.append(act_fn)
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
-            layers.append(act_fn)
     
     return nn.Sequential(*layers)
 

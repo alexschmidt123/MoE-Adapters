@@ -41,6 +41,7 @@ ce_method: 0
 method: "MoE-Adapters"
 lr: 1e-3
 ls: 0.0
+epochs: 1  # Number of training epochs per task (default: 1, can be increased for better convergence)
 #we:
 #avg_freq:
 #ref_dataset:

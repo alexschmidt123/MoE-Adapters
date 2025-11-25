@@ -43,14 +43,25 @@ echo "=========================================="
 echo "Running experiment: $CONFIG_NAME"
 echo "Config file: $CONFIG_FILE"
 echo "Dataset: $DATASET"
+if [ "$2" != "" ]; then
+    echo "Epochs override: $2"
+fi
 echo "=========================================="
 
+# Build command with optional epoch override
+CMD="CUDA_VISIBLE_DEVICES=0 python main.py \
+    --config-path \"$CONFIG_PATH\" \
+    --config-name \"$CONFIG_NAME.yaml\" \
+    dataset_root=\"../datasets/\" \
+    class_order=\"class_orders/${DATASET}.yaml\""
+
+# Add epoch override if provided
+if [ "$2" != "" ]; then
+    CMD="$CMD epochs=$2"
+fi
+
 # Run the experiment
-CUDA_VISIBLE_DEVICES=0 python main.py \
-    --config-path "$CONFIG_PATH" \
-    --config-name "$CONFIG_NAME.yaml" \
-    dataset_root="../datasets/" \
-    class_order="class_orders/${DATASET}.yaml"
+eval $CMD
 
 echo "=========================================="
 echo "Experiment completed: $CONFIG_NAME"

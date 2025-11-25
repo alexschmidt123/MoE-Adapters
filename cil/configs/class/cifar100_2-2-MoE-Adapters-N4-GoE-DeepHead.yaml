@@ -30,5 +30,5 @@ model:
   graph_head_layers: [512, 256]    # 2 hidden layers
   graph_head_activation: "gelu"    # GELU activation
   graph_head_use_norm: true        # Use LayerNorm between layers
-  graph_head_dropout: 0.1          # Dropout for regularization
+  graph_head_dropout: 0.0          # Dropout disabled (was 0.1, may cause training issues)
 

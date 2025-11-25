@@ -1,0 +1,37 @@
+# Configuration for CIFAR-100 with 4 experts, Graph-over-Experts (GoE) Mixer, and 5-layer adapters
+# N=4, k=2, with graph mixer enabled, each expert has 5 layers (deeper than baseline)
+# Bottleneck stays at 64 (not configurable)
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N4-GoE
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-GoE-ExpertDepth5"
+
+# Model configuration
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Graph mixer settings (inherited from GoE config)
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
+  graph_noise_epsilon: 0.0         # Noise epsilon set to zero
+  
+  # Expert adapter depth configuration
+  # Bottleneck is fixed at 64 (not configurable)
+  expert_hidden_layers: [64, 64, 64]  # Additional hidden layers for deeper adapters
+                                      # This creates: 512 → 64 → 64 → 64 → 64 → 512 (5 layers total)
+                                      # 
+                                      # Options:
+                                      #   null or omit: 2 layers (baseline) - 512 → 64 → 512
+                                      #   [64]: 3 layers - 512 → 64 → 64 → 512
+                                      #   [64, 64]: 4 layers - 512 → 64 → 64 → 64 → 512
+                                      #   [64, 64, 64]: 5 layers - 512 → 64 → 64 → 64 → 64 → 512
+

@@ -292,11 +292,21 @@ class ResidualAttentionBlock(nn.Module):
         if cfg is not None and hasattr(cfg, 'model'):
             self.experts_num = getattr(cfg.model, 'num_experts', 2)
             self.top_k = getattr(cfg.model, 'top_k', 2)
+            # Get expert hidden layers for deeper adapters (None = standard 2-layer)
+            expert_hidden_layers = getattr(cfg.model, 'expert_hidden_layers', None)
+            if expert_hidden_layers is not None and isinstance(expert_hidden_layers, str):
+                if expert_hidden_layers.lower() == 'none':
+                    expert_hidden_layers = None
+            if expert_hidden_layers is not None and hasattr(expert_hidden_layers, '__iter__') and not isinstance(expert_hidden_layers, str):
+                self.expert_hidden_layers = list(expert_hidden_layers)
+            else:
+                self.expert_hidden_layers = None
         else:
             self.experts_num = 2
             self.top_k = 2
+            self.expert_hidden_layers = None
             
-        self.ffn_num = 64
+        self.ffn_num = 64  # Bottleneck size fixed at 64
         self.softmax = nn.Softmax(1)
         self.softplus = nn.Softplus()
         self.noisy_gating = True
@@ -318,6 +328,7 @@ class ResidualAttentionBlock(nn.Module):
                                     init_option='lora',
                                     adapter_scalar=0.1,
                                     adapter_layernorm_option='none',
+                                    hidden_layers=self.expert_hidden_layers,
                                     )
             self.adaptmlp_list.append(self.adaptmlp)
 

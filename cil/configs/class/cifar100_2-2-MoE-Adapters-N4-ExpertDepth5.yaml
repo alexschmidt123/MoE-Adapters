@@ -1,0 +1,28 @@
+# Configuration for CIFAR-100 with 4 experts, 5-layer adapters
+# N=4, k=2, each expert has 5 layers (deeper than baseline)
+# Bottleneck stays at 64 (not configurable)
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N4
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-ExpertDepth5"
+
+# Model configuration
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Expert adapter depth configuration
+  # Bottleneck is fixed at 64 (not configurable)
+  expert_hidden_layers: [64, 64, 64]  # Additional hidden layers for deeper adapters
+                                      # This creates: 512 → 64 → 64 → 64 → 64 → 512 (5 layers total)
+                                      # 
+                                      # Options:
+                                      #   null or omit: 2 layers (baseline) - 512 → 64 → 512
+                                      #   [64]: 3 layers - 512 → 64 → 64 → 512
+                                      #   [64, 64]: 4 layers - 512 → 64 → 64 → 64 → 512
+                                      #   [64, 64, 64]: 5 layers - 512 → 64 → 64 → 64 → 64 → 512
+
