@@ -1,0 +1,38 @@
+# Configuration for CIFAR-100 with 4 experts, HMoE (Heterogeneous MoE), and Graph-over-Experts (GoE) Mixer
+# N=4, k=2, with heterogeneous expert capacities and graph mixer enabled
+# This demonstrates combining HMoE with the graph-based method
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-HMoE-GoE"
+
+# Model configuration for HMoE + Graph-over-Experts
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # HMoE: Heterogeneous Mixture of Experts settings
+  hmoe_enabled: true       # Enable heterogeneous experts with different capacities
+  # Expert capacities (bottleneck sizes) - smaller experts for simple tasks, larger for complex
+  # Example: [32, 48, 64, 96] means expert 0 has capacity 32, expert 1 has 48, etc.
+  # If not specified or set to None, defaults to homogeneous (all 64)
+  hmoe_expert_capacities: [32, 48, 64, 96]  # Heterogeneous capacities
+  # Balanced activation loss weight - encourages smaller experts to be activated more frequently
+  # Higher values (e.g., 0.1-1.0) encourage more balanced usage
+  # Set to 0.0 to disable balanced activation loss
+  hmoe_balanced_activation_weight: 0.1
+  
+  # Graph mixer settings (works seamlessly with HMoE)
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
+  graph_noise_epsilon: 0.0         # Noise epsilon set to zero

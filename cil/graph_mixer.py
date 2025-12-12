@@ -100,6 +100,7 @@ class GraphExpertMixer(nn.Module):
         graph_proto_layers: Optional[List[int]] = None,
         graph_proto_activation: str = "none",
         graph_proto_use_norm: bool = False,
+        graph_proto_dropout: float = 0.0,
         graph_proj_layers: Optional[List[int]] = None,
         graph_proj_activation: str = "none",
         graph_proj_use_norm: bool = False,
@@ -144,7 +145,7 @@ class GraphExpertMixer(nn.Module):
                 hidden_dims=graph_proto_layers,
                 activation=graph_proto_activation,
                 use_norm=graph_proto_use_norm,
-                dropout=0.0,
+                dropout=graph_proto_dropout,
                 bias=False
             )
             for _ in range(num_experts)

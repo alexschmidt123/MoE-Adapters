@@ -301,12 +301,44 @@ class ResidualAttentionBlock(nn.Module):
                 self.expert_hidden_layers = list(expert_hidden_layers)
             else:
                 self.expert_hidden_layers = None
+            
+            # HMoE: Heterogeneous Mixture of Experts configuration
+            # If enabled, experts can have different capacities (bottleneck sizes)
+            self.hmoe_enabled = getattr(cfg.model, 'hmoe_enabled', False)
+            if self.hmoe_enabled:
+                # Get expert capacities (bottleneck sizes) from config
+                # If not provided, defaults to homogeneous (all 64)
+                expert_capacities = getattr(cfg.model, 'hmoe_expert_capacities', None)
+                if expert_capacities is not None:
+                    if isinstance(expert_capacities, str):
+                        if expert_capacities.lower() == 'none':
+                            expert_capacities = None
+                    if expert_capacities is not None and hasattr(expert_capacities, '__iter__') and not isinstance(expert_capacities, str):
+                        expert_capacities = list(expert_capacities)
+                        # Ensure we have the right number of capacities
+                        if len(expert_capacities) != self.experts_num:
+                            raise ValueError(f"hmoe_expert_capacities must have length {self.experts_num}, got {len(expert_capacities)}")
+                        self.expert_capacities = expert_capacities
+                    else:
+                        self.expert_capacities = None
+                else:
+                    self.expert_capacities = None
+                
+                # Balanced activation loss weight (encourages smaller expert usage)
+                self.hmoe_balanced_activation_weight = float(getattr(cfg.model, 'hmoe_balanced_activation_weight', 0.0))
+            else:
+                self.expert_capacities = None
+                self.hmoe_balanced_activation_weight = 0.0
         else:
             self.experts_num = 2
             self.top_k = 2
             self.expert_hidden_layers = None
+            self.hmoe_enabled = False
+            self.expert_capacities = None
+            self.hmoe_balanced_activation_weight = 0.0
             
-        self.ffn_num = 64  # Bottleneck size fixed at 64
+        # Default bottleneck size (used for homogeneous experts or as fallback)
+        self.ffn_num = 64  # Bottleneck size fixed at 64 for homogeneous case
         self.softmax = nn.Softmax(1)
         self.softplus = nn.Softplus()
         self.noisy_gating = True
@@ -323,8 +355,16 @@ class ResidualAttentionBlock(nn.Module):
         for i in range(self.step):
             self.router_list.append(nn.Parameter(torch.zeros(d_model, self.experts_num), requires_grad=True))
             self.w_noise_list.append(nn.Parameter(torch.zeros(d_model, self.experts_num), requires_grad=True))
-        for i in range(self.experts_num):  #
-            self.adaptmlp = Adapter(d_model=d_model, dropout=0.1, bottleneck=self.ffn_num,
+        
+        # Create experts with potentially heterogeneous capacities
+        for i in range(self.experts_num):
+            # Determine bottleneck size for this expert
+            if self.hmoe_enabled and self.expert_capacities is not None:
+                expert_bottleneck = self.expert_capacities[i]
+            else:
+                expert_bottleneck = self.ffn_num  # Use default homogeneous size
+            
+            self.adaptmlp = Adapter(d_model=d_model, dropout=0.1, bottleneck=expert_bottleneck,
                                     init_option='lora',
                                     adapter_scalar=0.1,
                                     adapter_layernorm_option='none',
@@ -367,6 +407,7 @@ class ResidualAttentionBlock(nn.Module):
                     graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
                     graph_proto_activation=str(getattr(cfg.model, 'graph_proto_activation', 'none')),
                     graph_proto_use_norm=bool(getattr(cfg.model, 'graph_proto_use_norm', False)),
+                    graph_proto_dropout=float(getattr(cfg.model, 'graph_proto_dropout', 0.0)),
                     graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
                     graph_proj_activation=str(getattr(cfg.model, 'graph_proj_activation', 'none')),
                     graph_proj_use_norm=bool(getattr(cfg.model, 'graph_proj_use_norm', False)),
@@ -409,6 +450,55 @@ class ResidualAttentionBlock(nn.Module):
         if x.shape[0] == 1:
             return torch.tensor([0], device=x.device, dtype=x.dtype)
         return x.float().var() / (x.float().mean()**2 + eps)
+    
+    def compute_hmoe_balanced_activation_loss(self, gates, expert_capacities):
+        """
+        Compute balanced activation loss for HMoE.
+        Encourages smaller experts to be activated more frequently to balance resource utilization.
+        
+        Args:
+            gates: Gate values [B, num_experts] indicating expert selection weights
+            expert_capacities: List of expert capacities (bottleneck sizes) [num_experts]
+            
+        Returns:
+            loss: Scalar loss value
+        """
+        if not self.hmoe_enabled or self.hmoe_balanced_activation_weight <= 0:
+            return torch.tensor(0.0, device=gates.device, dtype=gates.dtype)
+        
+        # Compute activation frequency per expert (sum over batch)
+        activation_freq = gates.sum(dim=0)  # [num_experts]
+        
+        # Normalize capacities to get relative sizes (inverse: smaller = higher weight)
+        capacities = torch.tensor(expert_capacities, device=gates.device, dtype=gates.dtype)
+        # Normalize to [0, 1] range, then invert so smaller experts get higher weight
+        min_cap = capacities.min()
+        max_cap = capacities.max()
+        if max_cap > min_cap:
+            normalized_caps = (capacities - min_cap) / (max_cap - min_cap)
+            # Invert: smaller experts should be activated more
+            expert_weights = 1.0 - normalized_caps  # Smaller experts get higher weight
+        else:
+            # All experts same size, use uniform weights
+            expert_weights = torch.ones_like(capacities) / len(capacities)
+        
+        # Normalize activation frequencies
+        total_activation = activation_freq.sum()
+        if total_activation > 0:
+            normalized_freq = activation_freq / total_activation
+        else:
+            normalized_freq = activation_freq
+        
+        # Compute weighted activation: we want smaller experts to have higher activation
+        # Loss = negative correlation between expert size and activation frequency
+        # We want: smaller experts (higher weight) should have higher activation
+        weighted_activation = (normalized_freq * expert_weights).sum()
+        
+        # Loss encourages alignment: smaller experts should be activated more
+        # We maximize weighted_activation, so minimize its negative
+        loss = -weighted_activation
+        
+        return loss
 
     def _gates_to_load(self, gates):
         """Compute the true load per expert, given the gates.
@@ -522,6 +612,15 @@ class ResidualAttentionBlock(nn.Module):
             # Standard MoE combine
             y_moe = dispatcher.combine(expert_outputs)
             y_moe = y_moe.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
+            
+            # HMoE: Compute balanced activation loss (if enabled)
+            if self.hmoe_enabled and self.hmoe_balanced_activation_weight > 0 and self.is_train:
+                hmoe_loss = self.compute_hmoe_balanced_activation_loss(gates, self.expert_capacities)
+                # Accumulate extra loss (will be added in training loop)
+                if self.extra_losses is None:
+                    self.extra_losses = self.hmoe_balanced_activation_weight * hmoe_loss
+                else:
+                    self.extra_losses = self.extra_losses + self.hmoe_balanced_activation_weight * hmoe_loss
             
             # Graph-over-Experts path (if enabled)
             if self.graph_enabled and self.graph_mixer is not None:
