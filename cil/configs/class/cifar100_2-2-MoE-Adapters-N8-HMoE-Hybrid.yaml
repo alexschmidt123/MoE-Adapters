@@ -1,0 +1,35 @@
+# Configuration for CIFAR-100 with 8 experts and HMoE (Heterogeneous Mixture of Experts) - Hybrid Strategy
+# N=8, k=2, with hybrid expert capacities (NO graph mixer)
+# Baseline: HMoE only with hybrid strategy
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N8-HMoE-Hybrid"
+
+# Model configuration for HMoE (without graph mixer)
+model:
+  # MoE parameters
+  num_experts: 8           # Number of experts (N=8)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # HMoE: Heterogeneous Mixture of Experts settings
+  hmoe_enabled: true       # Enable heterogeneous experts with different capacities
+  # Hybrid strategy: combines homogeneous and heterogeneous elements
+  # Creates pattern like [32, 32, 48, 64] for 4 experts - some small experts, then increasing
+  hmoe_strategy: "hybrid"  # Options: "geometric", "arithmetic", "hybrid", or "manual"
+  hmoe_base_capacity: 32     # Base capacity for smaller experts (hybrid strategy)
+  # P-Penalty loss weight (from HMoE paper) - encourages smaller experts to be activated more
+  # Formula: L_P-Penalty = N * Σ(M_i * P̂_i) where M_i is expert capacity, P̂_i is gating prob
+  # Higher values (e.g., 0.01-0.1) encourage more balanced usage
+  # Set to 0.0 to disable P-Penalty loss
+  hmoe_balanced_activation_weight: 0.01
+  # Entropy regularization on gating probabilities - encourages diverse expert usage
+  hmoe_gate_entropy_weight: 0.0
+  # Load balancing loss weight - encourages uniform distribution of examples across experts
+  hmoe_load_balance_weight: 0.0
+  
+  # Graph mixer DISABLED (HMoE only, no graph)
+  graph_mixer_enabled: false

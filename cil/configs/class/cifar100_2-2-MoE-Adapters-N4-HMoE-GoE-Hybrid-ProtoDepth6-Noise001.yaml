@@ -1,0 +1,46 @@
+# Configuration for CIFAR-100 with 4 experts, HMoE (Hybrid Strategy), and Graph-over-Experts (GoE) Mixer
+# N=4, k=2, with hybrid expert capacities, graph mixer enabled, proto depth=6, and noise epsilon=0.001
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-HMoE-GoE-Hybrid-ProtoDepth6-Noise001"
+
+# Model configuration for HMoE + Graph-over-Experts with Hybrid Strategy, Proto Depth=6, and Noise
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # HMoE: Heterogeneous Mixture of Experts settings
+  hmoe_enabled: true       # Enable heterogeneous experts with different capacities
+  # Hybrid strategy: combines homogeneous and heterogeneous elements
+  # Creates pattern like [32, 32, 48, 64] for 4 experts - some small experts, then increasing
+  # This may help graph mixer by having similar-capacity experts to mix
+  hmoe_strategy: "hybrid"  # Options: "geometric", "arithmetic", "hybrid", or "manual"
+  hmoe_base_capacity: 32     # Base capacity for smaller experts (hybrid strategy)
+  # P-Penalty loss weight (from HMoE paper) - encourages smaller experts to be activated more
+  # Formula: L_P-Penalty = N * Σ(M_i * P̂_i) where M_i is expert capacity, P̂_i is gating prob
+  # Higher values (e.g., 0.01-0.1) encourage more balanced usage
+  # Set to 0.0 to disable P-Penalty loss
+  hmoe_balanced_activation_weight: 0.01
+  
+  # Graph mixer settings (works seamlessly with HMoE)
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
+  graph_noise_epsilon: 0.001      # Base noise level (epsilon = 0.001)
+  
+  # Header layer configurations: Proto depth=6 (proto-feature generators, depth=6)
+  # proto: 6-layer MLP per expert (d_model -> 512 -> 256 -> 128 -> 64 -> 32 -> d_model)
+  graph_proto_layers: [512, 256, 128, 64, 32]   # 5 hidden layers (depth=6)
+  graph_proto_activation: "gelu"                # GELU activation
+  graph_proto_use_norm: true                    # Use LayerNorm between layers
+  graph_proto_dropout: 0.1                      # Add dropout for regularization (can be tuned)

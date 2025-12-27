@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Tuple, Union
+from typing import Tuple, Union, List, Optional, List, Optional
 
 import os
 import json
@@ -13,6 +13,68 @@ from collections import Counter
 
 global_taskid = 0
 global_is_train=True
+
+
+def generate_geometric_capacities(num_experts: int, base_capacity: int = 16, ratio: float = 2.0) -> List[int]:
+    """
+    Generate expert capacities using geometric progression strategy.
+    
+    Args:
+        num_experts: Number of experts
+        base_capacity: Starting capacity for the smallest expert (default: 16)
+        ratio: Geometric ratio between consecutive experts (default: 2.0)
+               For ratio=2.0: [16, 32, 64, 128, ...]
+    
+    Returns:
+        List of capacities following geometric progression
+    """
+    capacities = [int(base_capacity * (ratio ** i)) for i in range(num_experts)]
+    return capacities
+
+
+def generate_arithmetic_capacities(num_experts: int, base_capacity: int = 32, step: int = 16) -> List[int]:
+    """
+    Generate expert capacities using arithmetic progression strategy.
+    More balanced than geometric, with smaller gaps between experts.
+    
+    Args:
+        num_experts: Number of experts
+        base_capacity: Starting capacity for the smallest expert (default: 32)
+        step: Step size between consecutive experts (default: 16)
+              For step=16: [32, 48, 64, 80, ...]
+    
+    Returns:
+        List of capacities following arithmetic progression
+    """
+    capacities = [int(base_capacity + step * i) for i in range(num_experts)]
+    return capacities
+
+
+def generate_hybrid_capacities(num_experts: int, base_capacity: int = 32) -> List[int]:
+    """
+    Generate expert capacities using hybrid strategy.
+    Combines homogeneous and heterogeneous elements for balanced distribution.
+    
+    Args:
+        num_experts: Number of experts
+        base_capacity: Base capacity for smaller experts (default: 32)
+                      Creates pattern like [32, 32, 48, 64] for 4 experts
+    
+    Returns:
+        List of capacities following hybrid progression
+    """
+    if num_experts <= 2:
+        return [base_capacity] * num_experts
+    
+    # Create hybrid: some small (homogeneous), then increasing (heterogeneous)
+    num_small = max(1, num_experts // 2)
+    capacities = [base_capacity] * num_small
+    
+    # Add increasing capacities for remaining experts
+    for i in range(num_experts - num_small):
+        capacities.append(int(base_capacity * (1.5 ** (i + 1))))
+    
+    return capacities
 class SparseDispatcher(object):
     """Helper for implementing a mixture of experts.
     The purpose of this class is to create input minibatches for the
@@ -306,29 +368,65 @@ class ResidualAttentionBlock(nn.Module):
             # If enabled, experts can have different capacities (bottleneck sizes)
             self.hmoe_enabled = getattr(cfg.model, 'hmoe_enabled', False)
             if self.hmoe_enabled:
-                # Get expert capacities (bottleneck sizes) from config
-                # If not provided, defaults to homogeneous (all 64)
-                expert_capacities = getattr(cfg.model, 'hmoe_expert_capacities', None)
-                if expert_capacities is not None:
-                    if isinstance(expert_capacities, str):
-                        if expert_capacities.lower() == 'none':
-                            expert_capacities = None
-                    if expert_capacities is not None and hasattr(expert_capacities, '__iter__') and not isinstance(expert_capacities, str):
-                        expert_capacities = list(expert_capacities)
-                        # Ensure we have the right number of capacities
-                        if len(expert_capacities) != self.experts_num:
-                            raise ValueError(f"hmoe_expert_capacities must have length {self.experts_num}, got {len(expert_capacities)}")
-                        self.expert_capacities = expert_capacities
+                # Get capacity generation strategy
+                hmoe_strategy = getattr(cfg.model, 'hmoe_strategy', None)
+                if isinstance(hmoe_strategy, str):
+                    hmoe_strategy = hmoe_strategy.lower()
+                
+                # Generate or get expert capacities
+                if hmoe_strategy == 'geometric':
+                    # Geometric strategy: capacities follow geometric progression
+                    base_capacity = int(getattr(cfg.model, 'hmoe_base_capacity', 16))
+                    geometric_ratio = float(getattr(cfg.model, 'hmoe_geometric_ratio', 2.0))
+                    self.expert_capacities = generate_geometric_capacities(
+                        self.experts_num, base_capacity, geometric_ratio
+                    )
+                    print(f"HMoE: Using geometric strategy with capacities: {self.expert_capacities} (base={base_capacity}, ratio={geometric_ratio})")
+                elif hmoe_strategy == 'arithmetic':
+                    # Arithmetic strategy: capacities follow arithmetic progression (more balanced)
+                    base_capacity = int(getattr(cfg.model, 'hmoe_base_capacity', 32))
+                    step = int(getattr(cfg.model, 'hmoe_arithmetic_step', 16))
+                    self.expert_capacities = generate_arithmetic_capacities(
+                        self.experts_num, base_capacity, step
+                    )
+                    print(f"HMoE: Using arithmetic strategy with capacities: {self.expert_capacities} (base={base_capacity}, step={step})")
+                elif hmoe_strategy == 'hybrid':
+                    # Hybrid strategy: combines homogeneous and heterogeneous elements
+                    base_capacity = int(getattr(cfg.model, 'hmoe_base_capacity', 32))
+                    self.expert_capacities = generate_hybrid_capacities(
+                        self.experts_num, base_capacity
+                    )
+                    print(f"HMoE: Using hybrid strategy with capacities: {self.expert_capacities} (base={base_capacity})")
+                else:
+                    # Manual specification or None (defaults to homogeneous)
+                    expert_capacities = getattr(cfg.model, 'hmoe_expert_capacities', None)
+                    if expert_capacities is not None:
+                        if isinstance(expert_capacities, str):
+                            if expert_capacities.lower() == 'none':
+                                expert_capacities = None
+                        if expert_capacities is not None and hasattr(expert_capacities, '__iter__') and not isinstance(expert_capacities, str):
+                            expert_capacities = list(expert_capacities)
+                            # Ensure we have the right number of capacities
+                            if len(expert_capacities) != self.experts_num:
+                                raise ValueError(f"hmoe_expert_capacities must have length {self.experts_num}, got {len(expert_capacities)}")
+                            self.expert_capacities = expert_capacities
+                        else:
+                            self.expert_capacities = None
                     else:
                         self.expert_capacities = None
-                else:
-                    self.expert_capacities = None
                 
-                # Balanced activation loss weight (encourages smaller expert usage)
+                # P-Penalty loss weight (from HMoE paper)
                 self.hmoe_balanced_activation_weight = float(getattr(cfg.model, 'hmoe_balanced_activation_weight', 0.0))
+                # Entropy regularization on gating probabilities (encourages diverse expert usage)
+                self.hmoe_gate_entropy_weight = float(getattr(cfg.model, 'hmoe_gate_entropy_weight', 0.0))
+                # Load balancing loss weight (standard MoE load balancing)
+                # Encourages uniform distribution of examples across experts
+                self.hmoe_load_balance_weight = float(getattr(cfg.model, 'hmoe_load_balance_weight', 0.0))
             else:
                 self.expert_capacities = None
                 self.hmoe_balanced_activation_weight = 0.0
+                self.hmoe_gate_entropy_weight = 0.0
+                self.hmoe_load_balance_weight = 0.0
         else:
             self.experts_num = 2
             self.top_k = 2
@@ -336,6 +434,8 @@ class ResidualAttentionBlock(nn.Module):
             self.hmoe_enabled = False
             self.expert_capacities = None
             self.hmoe_balanced_activation_weight = 0.0
+            self.hmoe_gate_entropy_weight = 0.0
+            self.hmoe_load_balance_weight = 0.0
             
         # Default bottleneck size (used for homogeneous experts or as fallback)
         self.ffn_num = 64  # Bottleneck size fixed at 64 for homogeneous case
@@ -453,52 +553,39 @@ class ResidualAttentionBlock(nn.Module):
     
     def compute_hmoe_balanced_activation_loss(self, gates, expert_capacities):
         """
-        Compute balanced activation loss for HMoE.
-        Encourages smaller experts to be activated more frequently to balance resource utilization.
+        Compute P-Penalty loss for HMoE (from HMoE paper).
+        Penalizes activation of larger experts proportionally to their size.
+        
+        Formula: L_P-Penalty = N * Σ(M_i * P̂_i)
+        where:
+            N = number of experts
+            M_i = capacity/size of expert i (bottleneck dimension)
+            P̂_i = average gating probability for expert i (mean over batch)
+        
+        This encourages smaller experts to be activated more frequently.
         
         Args:
             gates: Gate values [B, num_experts] indicating expert selection weights
             expert_capacities: List of expert capacities (bottleneck sizes) [num_experts]
             
         Returns:
-            loss: Scalar loss value
+            loss: Scalar loss value (P-Penalty)
         """
         if not self.hmoe_enabled or self.hmoe_balanced_activation_weight <= 0:
             return torch.tensor(0.0, device=gates.device, dtype=gates.dtype)
         
-        # Compute activation frequency per expert (sum over batch)
-        activation_freq = gates.sum(dim=0)  # [num_experts]
+        N = len(expert_capacities)  # Number of experts
+        M = torch.tensor(expert_capacities, device=gates.device, dtype=gates.dtype)  # [num_experts] - expert capacities
         
-        # Normalize capacities to get relative sizes (inverse: smaller = higher weight)
-        capacities = torch.tensor(expert_capacities, device=gates.device, dtype=gates.dtype)
-        # Normalize to [0, 1] range, then invert so smaller experts get higher weight
-        min_cap = capacities.min()
-        max_cap = capacities.max()
-        if max_cap > min_cap:
-            normalized_caps = (capacities - min_cap) / (max_cap - min_cap)
-            # Invert: smaller experts should be activated more
-            expert_weights = 1.0 - normalized_caps  # Smaller experts get higher weight
-        else:
-            # All experts same size, use uniform weights
-            expert_weights = torch.ones_like(capacities) / len(capacities)
+        # Compute average gating probability per expert (P̂_i)
+        # P̂_i = mean of gates over batch dimension
+        P_hat = gates.mean(dim=0)  # [num_experts] - average probability for each expert
         
-        # Normalize activation frequencies
-        total_activation = activation_freq.sum()
-        if total_activation > 0:
-            normalized_freq = activation_freq / total_activation
-        else:
-            normalized_freq = activation_freq
+        # P-Penalty loss: L = N * Σ(M_i * P̂_i)
+        # This penalizes larger experts (higher M_i) when they have high activation (high P̂_i)
+        p_penalty = N * (M * P_hat).sum()
         
-        # Compute weighted activation: we want smaller experts to have higher activation
-        # Loss = negative correlation between expert size and activation frequency
-        # We want: smaller experts (higher weight) should have higher activation
-        weighted_activation = (normalized_freq * expert_weights).sum()
-        
-        # Loss encourages alignment: smaller experts should be activated more
-        # We maximize weighted_activation, so minimize its negative
-        loss = -weighted_activation
-        
-        return loss
+        return p_penalty
 
     def _gates_to_load(self, gates):
         """Compute the true load per expert, given the gates.
@@ -614,13 +701,42 @@ class ResidualAttentionBlock(nn.Module):
             y_moe = y_moe.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
             
             # HMoE: Compute balanced activation loss (if enabled)
-            if self.hmoe_enabled and self.hmoe_balanced_activation_weight > 0 and self.is_train:
-                hmoe_loss = self.compute_hmoe_balanced_activation_loss(gates, self.expert_capacities)
-                # Accumulate extra loss (will be added in training loop)
-                if self.extra_losses is None:
-                    self.extra_losses = self.hmoe_balanced_activation_weight * hmoe_loss
-                else:
-                    self.extra_losses = self.extra_losses + self.hmoe_balanced_activation_weight * hmoe_loss
+            if self.hmoe_enabled and self.is_train:
+                # P-Penalty loss
+                if self.hmoe_balanced_activation_weight > 0:
+                    hmoe_loss = self.compute_hmoe_balanced_activation_loss(gates, self.expert_capacities)
+                    # Accumulate extra loss (will be added in training loop)
+                    if self.extra_losses is None:
+                        self.extra_losses = self.hmoe_balanced_activation_weight * hmoe_loss
+                    else:
+                        self.extra_losses = self.extra_losses + self.hmoe_balanced_activation_weight * hmoe_loss
+                
+                # Entropy regularization on gating probabilities (encourages diverse expert usage)
+                if self.hmoe_gate_entropy_weight > 0:
+                    # Compute entropy: -sum(p * log(p)) per sample, averaged
+                    # Higher entropy = more uniform distribution = more diverse expert usage
+                    p = gates.clamp_min(1e-9)  # Avoid log(0)
+                    gate_entropy = -(p * p.log()).sum(dim=-1).mean()  # [B] -> scalar
+                    # We want to maximize entropy (diversity), so minimize negative entropy
+                    entropy_loss = -gate_entropy
+                    # Accumulate extra loss
+                    if self.extra_losses is None:
+                        self.extra_losses = self.hmoe_gate_entropy_weight * entropy_loss
+                    else:
+                        self.extra_losses = self.extra_losses + self.hmoe_gate_entropy_weight * entropy_loss
+                
+                # Load balancing loss (standard MoE load balancing)
+                # Encourages uniform distribution of examples across experts
+                if self.hmoe_load_balance_weight > 0:
+                    # importance = sum of gate values per expert (measures total expert usage)
+                    # load = number of examples routed to each expert
+                    importance = gates.sum(0)  # [num_experts]
+                    load_balance_loss = self.cv_squared(importance) + self.cv_squared(load)
+                    # Accumulate extra loss
+                    if self.extra_losses is None:
+                        self.extra_losses = self.hmoe_load_balance_weight * load_balance_loss
+                    else:
+                        self.extra_losses = self.extra_losses + self.hmoe_load_balance_weight * load_balance_loss
             
             # Graph-over-Experts path (if enabled)
             if self.graph_enabled and self.graph_mixer is not None:

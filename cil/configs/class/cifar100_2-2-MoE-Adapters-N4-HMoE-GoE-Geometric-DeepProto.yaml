@@ -1,0 +1,53 @@
+# Configuration for CIFAR-100 with 4 experts, HMoE (Geometric Strategy), and Graph-over-Experts (GoE) Mixer with DeepProto
+# N=4, k=2, with geometric expert capacities, graph mixer enabled, and deeper proto-feature generators
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-HMoE-GoE-Geometric-DeepProto"
+
+# Model configuration for HMoE + Graph-over-Experts with DeepProto
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # HMoE: Heterogeneous Mixture of Experts settings
+  hmoe_enabled: true       # Enable heterogeneous experts with different capacities
+  # Geometric strategy: capacities follow geometric progression (e.g., [16, 32, 64, 128])
+  # Alternative: set hmoe_strategy to "manual" and specify hmoe_expert_capacities manually
+  hmoe_strategy: "geometric"  # Options: "geometric" or "manual"
+  hmoe_base_capacity: 16     # Starting capacity for smallest expert (geometric strategy)
+  hmoe_geometric_ratio: 2.0  # Ratio between consecutive experts (geometric strategy)
+  # P-Penalty loss weight (from HMoE paper) - encourages smaller experts to be activated more
+  # Formula: L_P-Penalty = N * Σ(M_i * P̂_i) where M_i is expert capacity, P̂_i is gating prob
+  # Higher values (e.g., 0.01-0.1) encourage more balanced usage
+  # Set to 0.0 to disable P-Penalty loss
+  hmoe_balanced_activation_weight: 0.01
+  # Entropy regularization on gating probabilities - encourages diverse expert usage
+  # Higher entropy = more uniform gate distribution = more diverse expert selection
+  # Set to 0.0 to disable entropy regularization
+  hmoe_gate_entropy_weight: 0.0
+  # Load balancing loss weight - encourages uniform distribution of examples across experts
+  # Uses coefficient of variation on importance and load (standard MoE load balancing)
+  # Set to 0.0 to disable load balancing loss
+  hmoe_load_balance_weight: 0.0
+  
+  # Graph mixer settings (works seamlessly with HMoE)
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: false  # Disable noise (GNN without noise)
+  graph_noise_epsilon: 0.0         # Noise epsilon set to zero
+  
+  # Header layer configurations: Deeper proto (proto-feature generators)
+  # proto: 2-layer MLP per expert (d_model -> 256 -> d_model)
+  graph_proto_layers: [256]        # 1 hidden layer
+  graph_proto_activation: "gelu"   # GELU activation
+  graph_proto_use_norm: true       # Use LayerNorm between layers
