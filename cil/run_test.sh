@@ -1,9 +1,7 @@
 #!/bin/bash
-# Run HMoE (Hybrid) experiments: 3 configs, each runs 3 times (9 total experiments)
-# Configs:
-#   1. HMoE Hybrid + ProtoDepth11 + GNN + N4 + Noise001
-#   2. HMoE Hybrid + ProtoDepth11 + GNN + N8 + Noise001
-#   3. HMoE Hybrid + ProtoDepth11 + GNN + N16 + Noise001
+# Run HMoE (Hybrid) experiments: 12 configs, each runs 3 times (36 total experiments)
+# Configs: HMoE Hybrid × (no GNN / GNN ProtoDepth11 Noise001) × N4/N8/N16 × cifar5*5/cifar10*10
+# 2 GNN options × 3 N values × 2 scenarios = 12 configs
 
 # Configuration
 CONFIG_PATH="configs/class"
@@ -11,11 +9,24 @@ DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/cifar100.yaml"
 NUM_RUNS=3
 
-# HMoE (Hybrid) + ProtoDepth11 configs: 3 configs total
+# HMoE (Hybrid) configs: 12 configs total
 CONFIGS=(
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    # No GNN configs - cifar5*5
+    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    # No GNN configs - cifar10*10
+    "cifar100_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "cifar100_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "cifar100_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    # GNN ProtoDepth11 Noise001 configs - cifar5*5
+    "cifar100_5-5-MoE-Adapters-N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    "cifar100_5-5-MoE-Adapters-N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    "cifar100_5-5-MoE-Adapters-N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    # GNN ProtoDepth11 Noise001 configs - cifar10*10
+    "cifar100_10-10-MoE-Adapters-N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    "cifar100_10-10-MoE-Adapters-N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
+    "cifar100_10-10-MoE-Adapters-N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"
 )
 
 # Colors for output
@@ -26,12 +37,16 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 echo "=========================================="
-echo "HMoE (Hybrid) + ProtoDepth11 Test Suite"
+echo "HMoE (Hybrid) Test Suite"
 echo "=========================================="
 echo "Configs: ${#CONFIGS[@]}"
-echo "  1. HMoE Hybrid + ProtoDepth11 + GNN N4 (noise=0.001)"
-echo "  2. HMoE Hybrid + ProtoDepth11 + GNN N8 (noise=0.001)"
-echo "  3. HMoE Hybrid + ProtoDepth11 + GNN N16 (noise=0.001)"
+echo "  HMoE Hybrid × (no GNN / GNN ProtoDepth11 Noise001) × N4/N8/N16 × cifar5*5/cifar10*10"
+echo "  No GNN configs (6):"
+echo "    - cifar5*5: N4, N8, N16"
+echo "    - cifar10*10: N4, N8, N16"
+echo "  GNN ProtoDepth11 Noise001 configs (6):"
+echo "    - cifar5*5: N4, N8, N16"
+echo "    - cifar10*10: N4, N8, N16"
 echo ""
 echo "Runs per config: $NUM_RUNS"
 echo "Total experiments: $((${#CONFIGS[@]} * $NUM_RUNS))"
@@ -83,20 +98,38 @@ TOTAL_EXPERIMENTS=$((${#CONFIGS[@]} * $NUM_RUNS))
 SUCCESSFUL=0
 FAILED=0
 
-# Run HMoE (Hybrid) + ProtoDepth11 configs
+# Run HMoE (Hybrid) configs
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}Testing HMoE (Hybrid) + ProtoDepth11 Configs${NC}"
+echo -e "${CYAN}Testing HMoE (Hybrid) Configs${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
 for config in "${CONFIGS[@]}"; do
     # Extract variant from config name
-    if [[ $config == *"N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"* ]]; then
-        variant="HMoE Hybrid + ProtoDepth11 + GNN N4 (noise=0.001)"
-    elif [[ $config == *"N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"* ]]; then
-        variant="HMoE Hybrid + ProtoDepth11 + GNN N8 (noise=0.001)"
-    elif [[ $config == *"N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001.yaml"* ]]; then
-        variant="HMoE Hybrid + ProtoDepth11 + GNN N16 (noise=0.001)"
+    if [[ $config == *"5-5"* ]] && [[ $config == *"N4-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N4 (no GNN, cifar5*5)"
+    elif [[ $config == *"5-5"* ]] && [[ $config == *"N8-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N8 (no GNN, cifar5*5)"
+    elif [[ $config == *"5-5"* ]] && [[ $config == *"N16-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N16 (no GNN, cifar5*5)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N4-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N4 (no GNN, cifar10*10)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N8-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N8 (no GNN, cifar10*10)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N16-HMoE-Hybrid.yaml"* ]] && [[ $config != *"GoE"* ]]; then
+        variant="HMoE Hybrid N16 (no GNN, cifar10*10)"
+    elif [[ $config == *"5-5"* ]] && [[ $config == *"N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N4 (noise=0.001, cifar5*5)"
+    elif [[ $config == *"5-5"* ]] && [[ $config == *"N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N8 (noise=0.001, cifar5*5)"
+    elif [[ $config == *"5-5"* ]] && [[ $config == *"N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N16 (noise=0.001, cifar5*5)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N4-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N4 (noise=0.001, cifar10*10)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N8-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N8 (noise=0.001, cifar10*10)"
+    elif [[ $config == *"10-10"* ]] && [[ $config == *"N16-HMoE-GoE-Hybrid-ProtoDepth11-Noise001"* ]]; then
+        variant="HMoE Hybrid + ProtoDepth11 + GNN N16 (noise=0.001, cifar10*10)"
     else
         variant="Unknown"
     fi

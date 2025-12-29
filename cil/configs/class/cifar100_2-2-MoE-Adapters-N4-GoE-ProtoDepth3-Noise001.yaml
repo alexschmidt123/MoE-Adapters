@@ -1,0 +1,33 @@
+# Configuration for CIFAR-100 with 4 experts and Graph-over-Experts (GoE) Mixer
+# N=4, k=2, with graph mixer enabled, proto depth=3, and noise epsilon=0.001
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-GoE-ProtoDepth3-Noise001"
+
+# Model configuration for Graph-over-Experts with 4 experts, Proto Depth=3, and Noise
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Graph mixer settings
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight (start at 0 to preserve baseline)
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
+  graph_noise_epsilon: 0.001      # Base noise level (epsilon = 0.001)
+  
+  # Header layer configurations: Proto depth=3 (proto-feature generators, depth=3)
+  # proto: 3-layer MLP per expert (d_model -> 256 -> 128 -> d_model)
+  graph_proto_layers: [256, 128]     # 2 hidden layers (depth=3)
+  graph_proto_activation: "gelu"    # GELU activation
+  graph_proto_use_norm: true        # Use LayerNorm between layers
+  graph_proto_dropout: 0.1          # Add dropout for regularization (can be tuned)
