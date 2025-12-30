@@ -10,7 +10,7 @@
 CONFIG_PATH="configs/class/cifar_configs"
 DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/cifar100.yaml"
-NUM_RUNS=1  # Set to 1 for initial run, can be increased for multiple runs
+NUM_RUNS=3  # Run each config 3 times
 
 # All 36 configs organized by scenario
 CONFIGS=(
