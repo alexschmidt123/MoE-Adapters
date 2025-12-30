@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run all ImageNet-100 experiments: 36 configs total
+Run all TinyImageNet experiments: 36 configs total
 Combinations: 2 MoE types × 2 GNN options × 3 N values × 3 scenarios
 MoE types: Original MoE / HMoE-Hybrid
 GNN options: No GNN / GNN ProtoDepth11 Noise001
@@ -8,6 +8,7 @@ N values: N4 / N8 / N16
 Scenarios: 2*2 / 5*5 / 10*10
 
 Cross-platform Python version - works on Windows, Linux, and macOS
+TinyImageNet downloads automatically (no manual download needed)
 """
 
 import os
@@ -17,54 +18,64 @@ import time
 from pathlib import Path
 
 # Configuration
-CONFIG_PATH = "configs/class/imagenet_configs"
+CONFIG_PATH = "configs/class/tinyimagenet_configs"
 DATASET_ROOT = "../datasets/"
-CLASS_ORDER = "class_orders/imagenet100.yaml"
+CLASS_ORDER = "class_orders/tinyimagenet.yaml"
 NUM_RUNS = 3  # Run each config 3 times
+
+def check_tinyimagenet_dataset():
+    """Check if TinyImageNet dataset is available (downloads automatically)"""
+    # TinyImageNet downloads automatically via continuum library
+    # Just verify the dataset directory exists or can be created
+    dataset_path = os.path.join(os.path.dirname(DATASET_ROOT), "datasets", "tinyimagenet")
+    
+    # The dataset will be downloaded automatically when first accessed
+    # So we just return True - the download happens in the dataset loader
+    return True
 
 # All 36 configs organized by scenario
 CONFIGS = [
     # 2*2 scenario (12 configs)
-    "imagenet100_2-2-MoE-Adapters-N4.yaml",
-    "imagenet100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "imagenet100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_2-2-MoE-Adapters-N8.yaml",
-    "imagenet100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "imagenet100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_2-2-MoE-Adapters-N16.yaml",
-    "imagenet100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "imagenet100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N4.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N8.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N16.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml",
+    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
     
     # 5*5 scenario (12 configs)
-    "imagenet100_5-5-MoE-Adapters-N4.yaml",
-    "imagenet100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "imagenet100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_5-5-MoE-Adapters-N8.yaml",
-    "imagenet100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "imagenet100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_5-5-MoE-Adapters-N16.yaml",
-    "imagenet100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "imagenet100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N4.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N8.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N16.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml",
+    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
     
     # 10*10 scenario (12 configs)
-    "imagenet100_10-10-MoE-Adapters-N4.yaml",
-    "imagenet100_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "imagenet100_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_10-10-MoE-Adapters-N8.yaml",
-    "imagenet100_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "imagenet100_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_10-10-MoE-Adapters-N16.yaml",
-    "imagenet100_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "imagenet100_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "imagenet100_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N4.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N8.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N16.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml",
+    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
 ]
 
 # ANSI color codes (works on Windows 10+ with ANSI support, or use colorama)
@@ -103,16 +114,23 @@ def run_experiment(config_name, run_num, total_runs):
         "main.py",
         "--config-path", CONFIG_PATH,
         "--config-name", config_name,
-        f"+dataset_root={DATASET_ROOT}",
-        f"+class_order={CLASS_ORDER}"
+        f"dataset_root={DATASET_ROOT}",
+        f"class_order={CLASS_ORDER}"
     ]
     
-    # Set CUDA_VISIBLE_DEVICES environment variable
+    # Set environment variables
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
+    # TQDM_DISABLE is not set, so progress bars will be shown
+    env["PYTHONUNBUFFERED"] = "1"  # Unbuffered output
     
-    # Run experiment
-    exit_code = subprocess.call(cmd, env=env)
+    # Run experiment with proper output handling
+    exit_code = subprocess.call(
+        cmd, 
+        env=env,
+        stdout=sys.stdout,  # Keep stdout for important messages
+        stderr=sys.stderr   # Keep stderr for errors
+    )
     
     # Clear GPU memory after completion
     clear_gpu_memory()
@@ -125,8 +143,14 @@ def run_experiment(config_name, run_num, total_runs):
         return False
 
 def main():
+    # Check dataset before starting (TinyImageNet downloads automatically)
+    if not check_tinyimagenet_dataset():
+        print("Exiting: TinyImageNet dataset check failed.")
+        return 1
+    
+    print()
     print("=" * 50)
-    print("ImageNet-100 Comprehensive Test Suite")
+    print("TinyImageNet Comprehensive Test Suite")
     print("=" * 50)
     print(f"Total configs: {len(CONFIGS)}")
     print("  - 2 MoE types: Original MoE / HMoE-Hybrid")
@@ -147,7 +171,7 @@ def main():
     
     # Run all configs
     print(f"{Colors.CYAN}{'='*50}{Colors.NC}")
-    print(f"{Colors.CYAN}Starting ImageNet-100 Experiments{Colors.NC}")
+    print(f"{Colors.CYAN}Starting TinyImageNet Experiments{Colors.NC}")
     print(f"{Colors.CYAN}{'='*50}{Colors.NC}")
     print()
     

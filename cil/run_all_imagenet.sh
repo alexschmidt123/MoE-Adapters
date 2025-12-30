@@ -1,60 +1,61 @@
 #!/bin/bash
-# Run all ImageNet-100 experiments: 36 configs total
+# Run all TinyImageNet experiments: 36 configs total
 # Combinations: 2 MoE types × 2 GNN options × 3 N values × 3 scenarios
 # MoE types: Original MoE / HMoE-Hybrid
 # GNN options: No GNN / GNN ProtoDepth11 Noise001
 # N values: N4 / N8 / N16
 # Scenarios: 2*2 / 5*5 / 10*10
+# Note: TinyImageNet downloads automatically (no manual download needed)
 
 # Configuration
-CONFIG_PATH="configs/class/imagenet_configs"
+CONFIG_PATH="configs/class/tinyimagenet_configs"
 DATASET_ROOT="../datasets/"
-CLASS_ORDER="class_orders/imagenet100.yaml"
+CLASS_ORDER="class_orders/tinyimagenet.yaml"
 NUM_RUNS=3  # Run each config 3 times
 
 # All 36 configs organized by scenario
 CONFIGS=(
     # 2*2 scenario (12 configs)
-    "imagenet100_2-2-MoE-Adapters-N4.yaml"
-    "imagenet100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "imagenet100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_2-2-MoE-Adapters-N8.yaml"
-    "imagenet100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "imagenet100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_2-2-MoE-Adapters-N16.yaml"
-    "imagenet100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "imagenet100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N4.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N8.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N16.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
     
     # 5*5 scenario (12 configs)
-    "imagenet100_5-5-MoE-Adapters-N4.yaml"
-    "imagenet100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "imagenet100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_5-5-MoE-Adapters-N8.yaml"
-    "imagenet100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "imagenet100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_5-5-MoE-Adapters-N16.yaml"
-    "imagenet100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "imagenet100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N4.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N8.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N16.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
     
     # 10*10 scenario (12 configs)
-    "imagenet100_10-10-MoE-Adapters-N4.yaml"
-    "imagenet100_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "imagenet100_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_10-10-MoE-Adapters-N8.yaml"
-    "imagenet100_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "imagenet100_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_10-10-MoE-Adapters-N16.yaml"
-    "imagenet100_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "imagenet100_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "imagenet100_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N4.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N8.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N16.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
 )
 
 # Colors for output
@@ -66,13 +67,14 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo "=========================================="
-echo "ImageNet-100 Comprehensive Test Suite"
+echo "TinyImageNet Comprehensive Test Suite"
 echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
 echo "  - 2 MoE types: Original MoE / HMoE-Hybrid"
 echo "  - 2 GNN options: No GNN / GNN ProtoDepth11 Noise001"
 echo "  - 3 N values: N4 / N8 / N16"
 echo "  - 3 scenarios: 2*2 / 5*5 / 10*10"
+echo "  - Dataset: TinyImageNet (downloads automatically)"
 echo ""
 echo "Runs per config: $NUM_RUNS"
 echo "Total experiments: $((${#CONFIGS[@]} * $NUM_RUNS))"
@@ -101,11 +103,12 @@ run_experiment() {
     echo -e "${BLUE}Run: $run_num / $total_runs${NC}"
     echo -e "${BLUE}========================================${NC}"
     
-    CUDA_VISIBLE_DEVICES=0 python main.py \
+    # Run with unbuffered output (progress bars will be shown)
+    CUDA_VISIBLE_DEVICES=0 python -u main.py \
         --config-path "$CONFIG_PATH" \
         --config-name "$config_name" \
-        +dataset_root="$DATASET_ROOT" \
-        +class_order="$CLASS_ORDER" || exit_code=$?
+        dataset_root="$DATASET_ROOT" \
+        class_order="$CLASS_ORDER" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
     clear_gpu_memory
@@ -127,7 +130,7 @@ FAILED_CONFIGS=()
 
 # Run all configs
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}Starting ImageNet-100 Experiments${NC}"
+echo -e "${CYAN}Starting TinyImageNet Experiments${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 

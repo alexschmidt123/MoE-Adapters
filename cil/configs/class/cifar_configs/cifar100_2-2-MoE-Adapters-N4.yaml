@@ -2,7 +2,7 @@
 # Generated unified config for comprehensive experiments
 
 defaults:
-  - cifar100_2-2-MoE-Adapters-N2
+  - ../cifar100_2-2-MoE-Adapters-N2
   - _self_
 
 # Override method name to create distinct output directory

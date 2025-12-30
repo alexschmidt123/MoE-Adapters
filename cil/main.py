@@ -6,6 +6,7 @@ import logging
 from omegaconf import DictConfig, OmegaConf
 
 from tqdm import tqdm
+import os
 
 import torch
 import statistics
@@ -76,7 +77,9 @@ def continual_clip(cfg: DictConfig) -> None:
 
         eval_loader = DataLoader(eval_dataset[:task_id + 1], batch_size=64)
         # breakpoint()
-        for inputs, targets, task_ids in tqdm(eval_loader):
+        # Disable tqdm progress bar if TQDM_DISABLE environment variable is set
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
+        for inputs, targets, task_ids in tqdm(eval_loader, disable=disable_tqdm):
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs, task_ids)
             metric_logger.add([outputs.cpu().argmax(dim=1), targets.cpu(), task_ids], subset="test")

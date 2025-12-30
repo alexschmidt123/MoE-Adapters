@@ -94,6 +94,9 @@ class ClassIncremental(nn.Module):
         # print("Using devices", devices)
 
         # text
+        # For training, we use only the current task's classes
+        # The model output will have shape [batch_size, num_classes_in_current_task]
+        # So labels should remain 0-indexed for the current task (no shift needed)
         classnames = get_class_names(self.classes_names, self.class_ids_per_task[task_id])
         print(classnames)
         texts = [self.prompt_template.format(c) for c in classnames]
@@ -104,7 +107,9 @@ class ClassIncremental(nn.Module):
 
         # start training
         self.model.train()
-        for iteration in tqdm(range(total_iterations + 1)):
+        # Disable tqdm progress bar if TQDM_DISABLE environment variable is set
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
+        for iteration in tqdm(range(total_iterations + 1), disable=disable_tqdm):
             scheduler(iteration)
             try:
                 inputs, targets, task_ids = next(train_iter)
@@ -112,15 +117,28 @@ class ClassIncremental(nn.Module):
                 train_iter = iter(train_loader)
                 inputs, targets, task_ids = next(train_iter)
 
-            if cfg.dataset == "tinyimagenet" and task_id != 0:
-                shift = 100 + (task_id - 1) * cfg.increment
-                targets -= shift
-            elif cfg.dataset == "imagenet100" and task_id != 0:
-                shift = cfg.initial_increment + (task_id - 1) * cfg.increment
-                targets -= shift
-            else:
-                shift = task_id * cfg.increment
-                targets -= shift
+            # Continuum library remaps labels to be 0-indexed per task
+            # However, for TinyImageNet, continuum may use cumulative labels instead
+            # We need to remap them to 0-indexed for the current task
+            # Check label range and remap if necessary
+            num_classes_current_task = len(texts)
+            if iteration == 0:  # Debug: print label info on first iteration
+                print(f"Task {task_id}: Label range before remap: min={targets.min().item()}, max={targets.max().item()}, num_classes={num_classes_current_task}")
+            
+            # Remap labels to 0-indexed for current task if needed
+            # Continuum should do this, but for TinyImageNet it might use cumulative indices
+            if targets.max().item() >= num_classes_current_task:
+                # Labels are cumulative, need to remap to task-local
+                # Find the minimum label value for this task (should be the first class index)
+                min_label = targets.min().item()
+                # Remap: subtract the minimum to get 0-indexed
+                targets = targets - min_label
+                if iteration == 0:
+                    print(f"Task {task_id}: Remapped labels - new range: min={targets.min().item()}, max={targets.max().item()}")
+            
+            # Ensure labels are in valid range [0, num_classes_current_task - 1]
+            assert targets.min().item() >= 0 and targets.max().item() < num_classes_current_task, \
+                f"Task {task_id}: Invalid label range! min={targets.min().item()}, max={targets.max().item()}, num_classes={num_classes_current_task}"
 
             inputs, targets = inputs.cuda(), targets.cuda()
 

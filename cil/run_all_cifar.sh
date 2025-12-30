@@ -101,11 +101,12 @@ run_experiment() {
     echo -e "${BLUE}Run: $run_num / $total_runs${NC}"
     echo -e "${BLUE}========================================${NC}"
     
-    CUDA_VISIBLE_DEVICES=0 python main.py \
+    # Run with unbuffered output (progress bars will be shown)
+    CUDA_VISIBLE_DEVICES=0 python -u main.py \
         --config-path "$CONFIG_PATH" \
         --config-name "$config_name" \
-        +dataset_root="$DATASET_ROOT" \
-        +class_order="$CLASS_ORDER" || exit_code=$?
+        dataset_root="$DATASET_ROOT" \
+        class_order="$CLASS_ORDER" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
     clear_gpu_memory

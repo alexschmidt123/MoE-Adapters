@@ -48,7 +48,8 @@ class DynamicDataset():
         num = new_dataset.shape[0]
 
         print("[Constructing] Calculating Distance")
-        for ndx in tqdm(np.arange(num)):
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
+        for ndx in tqdm(np.arange(num), disable=disable_tqdm):
             img = torch.unsqueeze(new_dataset[ndx], dim=0)
             img = img.cuda()
             img_feature = self.ref_model(img, None)
@@ -66,7 +67,7 @@ class DynamicDataset():
             m = self.memory_size
         cur_embedding_sum = None
         print("[Constructing] Collecting Examples")
-        for k in tqdm(np.arange(min(m, len(image_feature)))):
+        for k in tqdm(np.arange(min(m, len(image_feature))), disable=disable_tqdm):
             if not k:
                 index = np.argmin(
                     np.sum((image_feature_average - image_feature)**2, axis=1)
@@ -91,7 +92,8 @@ class DynamicDataset():
     def getNewDataset(self):
         samples = [] 
         count = 0
-        for sample in tqdm(self.cur_dataset):
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
+        for sample in tqdm(self.cur_dataset, disable=disable_tqdm):
             if count == 10000:
                 return samples
             count += 1
@@ -102,7 +104,8 @@ class DynamicDataset():
         print("Getting Reference Images")
         value = list(self.ref_database.values())
         out = []
-        for i in tqdm(value):
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
+        for i in tqdm(value, disable=disable_tqdm):
             out += i       
         return torch.tensor(out)
     

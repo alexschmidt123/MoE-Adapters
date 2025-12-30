@@ -103,16 +103,23 @@ def run_experiment(config_name, run_num, total_runs):
         "main.py",
         "--config-path", CONFIG_PATH,
         "--config-name", config_name,
-        f"+dataset_root={DATASET_ROOT}",
-        f"+class_order={CLASS_ORDER}"
+        f"dataset_root={DATASET_ROOT}",
+        f"class_order={CLASS_ORDER}"
     ]
     
-    # Set CUDA_VISIBLE_DEVICES environment variable
+    # Set environment variables
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
+    # TQDM_DISABLE is not set, so progress bars will be shown
+    env["PYTHONUNBUFFERED"] = "1"  # Unbuffered output
     
-    # Run experiment
-    exit_code = subprocess.call(cmd, env=env)
+    # Run experiment with proper output handling
+    exit_code = subprocess.call(
+        cmd, 
+        env=env,
+        stdout=sys.stdout,  # Keep stdout for important messages
+        stderr=sys.stderr   # Keep stderr for errors
+    )
     
     # Clear GPU memory after completion
     clear_gpu_memory()
