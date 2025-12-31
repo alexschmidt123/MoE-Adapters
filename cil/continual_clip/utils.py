@@ -44,9 +44,55 @@ def save_config(config: DictConfig) -> None:
 
 
 def get_workdir(path):
-    split_path = path.split("/")
-    workdir_idx = split_path.index("cil")
-    return "/".join(split_path[:workdir_idx+1])
+    """
+    Get the workdir path (up to and including 'cil' directory).
+    Cross-platform compatible for both Unix and Windows paths.
+    """
+    # Normalize path and convert to use os.sep
+    normalized_path = os.path.normpath(path)
+    
+    # Split path into components, handling both / and \ separators
+    # Replace all path separators with a consistent separator for splitting
+    path_str = normalized_path.replace('\\', '/').replace('//', '/')
+    if path_str.startswith('/'):
+        # Absolute path on Unix
+        parts = path_str.split('/')
+        parts[0] = '/'  # Keep root
+    else:
+        parts = path_str.split('/')
+    
+    # Handle Windows drive letters (e.g., "C:")
+    if len(parts) > 0 and ':' in parts[0] and len(parts[0]) == 2:
+        # Windows drive letter like "C:"
+        drive = parts[0]
+        parts = parts[1:]
+        parts.insert(0, drive)
+    
+    # Find 'cil' directory (case-insensitive)
+    workdir_idx = None
+    for i, part in enumerate(parts):
+        if part and part.lower() == "cil":
+            workdir_idx = i
+            break
+    
+    if workdir_idx is None:
+        # Fallback: return the path as-is if 'cil' not found
+        return normalized_path
+    
+    # Reconstruct path up to and including 'cil'
+    if parts[0] == '/':
+        # Unix absolute path
+        result = '/' + '/'.join(parts[1:workdir_idx+1])
+    elif ':' in parts[0] and len(parts[0]) == 2:
+        # Windows path with drive letter
+        result = parts[0] + os.sep + os.sep.join(parts[1:workdir_idx+1])
+        # Normalize to use proper Windows separators
+        result = os.path.normpath(result)
+    else:
+        # Relative path
+        result = os.path.join(*parts[:workdir_idx+1])
+    
+    return result
 
 ###########################
 def assign_learning_rate(param_group, new_lr):
