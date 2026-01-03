@@ -591,11 +591,25 @@ class TinyImagenet(ClassificationDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "TinyImageNet"
+        # Use real path: tinyimagenet/tiny-imagenet-200 instead of symlink
+        # Check both possible locations (with and without tinyimagenet prefix)
+        tinyimagenet_path = os.path.join(self.location, 'tiny-imagenet-200')
+        tinyimagenet_real_path = os.path.join(self.location, 'tinyimagenet', 'tiny-imagenet-200')
+        
+        # Prefer real path, fallback to symlink location
+        if os.path.exists(tinyimagenet_real_path) and os.path.isdir(tinyimagenet_real_path):
+            dataset_path = tinyimagenet_real_path
+        elif os.path.exists(tinyimagenet_path) and os.path.isdir(tinyimagenet_path):
+            dataset_path = tinyimagenet_path
+        else:
+            # Default to real path (will error if not found, which is expected)
+            dataset_path = tinyimagenet_real_path
+        
         self.train_dataset = TinyImageNet_dataset(
-            self.location+'/tiny-imagenet-200', train=True, transform=self.preprocess
+            dataset_path, train=True, transform=self.preprocess
         )
         self.test_dataset = TinyImageNet_dataset(
-            self.location+'/tiny-imagenet-200', train=False, transform=self.preprocess
+            dataset_path, train=False, transform=self.preprocess
         )
         self.build_dataloader()
 

@@ -1,11 +1,18 @@
-##!/bin/bash
+#!/bin/bash
 
 set -v
 set -e
 set -x
+
+# Configuration: Set your data location here
+# Default: use relative path to datasets directory (one level up from mtil)
+DATA_LOCATION="${DATA_LOCATION:-$(cd "$(dirname "$0")/../../.." && pwd)/datasets}"
+
 # 1.frozen_path 2. exp_no
 exp_no=router11_experts22_1000iters_few_shot
-GPU=6,7
+# GPU configuration: Set to available GPU IDs (comma-separated)
+# Default: GPU 0 (change if you have multiple GPUs)
+GPU="${GPU:-0}"
 chooser_dataset=(TinyImagenet Aircraft Caltech101 CIFAR100 DTD EuroSAT Flowers Food MNIST OxfordPet StanfordCars SUN397)
 dataset=(Aircraft Caltech101 CIFAR100 DTD EuroSAT Flowers Food MNIST OxfordPet StanfordCars SUN397)
 lr=(8e-3 5e-4 2e-4 5e-3 1e-3 1e-3 1e-2 1e-4 1e-2 1e-2 1e-2)
@@ -26,7 +33,7 @@ CUDA_VISIBLE_DEVICES=${GPU} python -m src.main \
     --iterations 1000 \
     --method finetune \
     --save ckpt/exp_${exp_no} \
-    --data-location /home/dhw/yjz_workspace/data/data \
+    --data-location ${DATA_LOCATION} \
     --task_id ${j} \
     --few_shot=5 \
     --is_train \
@@ -45,7 +52,7 @@ for ((i = 1; i < ${#chooser_dataset[@]}; i++)); do
         --save ckpt/exp_${exp_no} \
         --few_shot=5 \
         --load ckpt/exp_${exp_no}/${dataset_pre}_autochooser.pth \
-        --data-location /home/dhw/yjz_workspace/data/data \
+        --data-location ${DATA_LOCATION} \
         --is_train \
         --task_id ${i} \
         --train_chooser
@@ -62,7 +69,7 @@ CUDA_VISIBLE_DEVICES=${GPU} python -m src.main \
     --iterations 500 \
     --method finetune \
     --save ckpt/exp_${exp_no} \
-    --data-location /home/dhw/yjz_workspace/data/data \
+    --data-location ${DATA_LOCATION} \
     --ffn_adapt_where AdapterDoubleEncoder\
     --ffn_adapt \
     --task_id ${j} \
@@ -90,7 +97,7 @@ for ((i = 1; i < 11; i++)); do
         --iterations 500 \
         --save ckpt/exp_${exp_no} \
         --load ckpt/exp_${exp_no}/${dataset_pre}.pth \
-        --data-location /home/dhw/yjz_workspace/data/data \
+        --data-location ${DATA_LOCATION} \
         --ffn_adapt_where AdapterDoubleEncoder \
         --ffn_adapt \
         --apply_moe \
@@ -116,7 +123,7 @@ for ((j = 0; j < 11; j++)); do
         --eval-datasets=${dataset_cur} \
         --load ${model_ckpt_path}/${dataset[i]}.pth \
         --load_autochooser ${model_ckpt_path}/${chooser[i]}.pth \
-        --data-location /home/dhw/yjz_workspace/data/data \
+        --data-location ${DATA_LOCATION} \
         --ffn_adapt_where AdapterDoubleEncoder \
         --ffn_adapt \
         --apply_moe \

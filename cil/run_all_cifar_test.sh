@@ -1,60 +1,35 @@
 #!/bin/bash
-# Run all CIFAR-100 experiments: 36 configs total
-# Combinations: 2 MoE types × 2 GNN options × 3 N values × 3 scenarios
-# MoE types: Original MoE / HMoE-Hybrid
-# GNN options: No GNN / GNN ProtoDepth11 Noise001
+# Run all new CIFAR-100 test experiments: 12 configs total
+# Combinations: 3 N values × 2 scenarios × 2 MoE types
 # N values: N4 / N8 / N16
-# Scenarios: 2*2 / 5*5 / 10*10
+# Scenarios: 2*2 / 5*5
+# MoE types: MoE+GNN(ProtoDepth11) / HMoE-Hybrid+GNN(ProtoDepth11)
+# All configs use GNN with ProtoDepth=11 and NO noise
 
 # Configuration
 CONFIG_PATH="configs/class/cifar_configs"
 DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/cifar100.yaml"
 NUM_RUNS=3  # Run each config 3 times
+OUTPUT_DIR="experiments/outputs"  # Output directory
 
-# All 36 configs organized by scenario
+# All 12 new configs
 CONFIGS=(
-    # 2*2 scenario (12 configs)
-    "cifar100_2-2-MoE-Adapters-N4.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N8.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N16.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    # 2*2 scenario - MoE+GNN (6 configs)
+    "cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
+    "cifar100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
+    "cifar100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
+    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
     
-    # 5*5 scenario (12 configs)
-    "cifar100_5-5-MoE-Adapters-N4.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N8.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N16.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    
-    # 10*10 scenario (12 configs)
-    "cifar100_10-10-MoE-Adapters-N4.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N8.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N16.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    # 5*5 scenario - MoE+GNN (6 configs)
+    "cifar100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
+    "cifar100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
+    "cifar100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
+    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
 )
 
 # Colors for output
@@ -66,18 +41,22 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo "=========================================="
-echo "CIFAR-100 Comprehensive Test Suite"
+echo "CIFAR-100 Test Suite (New Configs)"
 echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
-echo "  - 2 MoE types: Original MoE / HMoE-Hybrid"
-echo "  - 2 GNN options: No GNN / GNN ProtoDepth11 Noise001"
 echo "  - 3 N values: N4 / N8 / N16"
-echo "  - 3 scenarios: 2*2 / 5*5 / 10*10"
+echo "  - 2 scenarios: 2*2 / 5*5"
+echo "  - 2 MoE types: MoE+GNN / HMoE-Hybrid+GNN"
+echo "  - All with ProtoDepth=11, NO noise"
 echo ""
 echo "Runs per config: $NUM_RUNS"
 echo "Total experiments: $((${#CONFIGS[@]} * $NUM_RUNS))"
+echo "Output directory: $OUTPUT_DIR"
 echo "=========================================="
 echo ""
+
+# Create output directory
+mkdir -p "${OUTPUT_DIR}"
 
 # Function to clear GPU memory
 clear_gpu_memory() {
@@ -101,16 +80,17 @@ run_experiment() {
     echo -e "${BLUE}Run: $run_num / $total_runs${NC}"
     echo -e "${BLUE}========================================${NC}"
     
-    # Run with unbuffered output (progress bars will be shown)
-    # Include run number in Hydra output directory to distinguish different runs
     # Remove .yaml extension from config name for directory name
     config_dir_name="${config_name%.yaml}"
+    
+    # Run with unbuffered output (progress bars will be shown)
+    # Output to experiments/outputs folder
     CUDA_VISIBLE_DEVICES=0 python -u main.py \
         --config-path "$CONFIG_PATH" \
         --config-name "$config_name" \
         dataset_root="$DATASET_ROOT" \
         class_order="$CLASS_ORDER" \
-        hydra.run.dir="outputs/${config_dir_name}/run_${run_num}" \
+        hydra.run.dir="${OUTPUT_DIR}/${config_dir_name}/run_${run_num}" \
         hydra.job.name="${config_dir_name}_run${run_num}" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
@@ -133,7 +113,7 @@ FAILED_CONFIGS=()
 
 # Run all configs
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}Starting CIFAR-100 Experiments${NC}"
+echo -e "${CYAN}Starting CIFAR-100 Test Experiments${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
@@ -144,8 +124,6 @@ for config in "${CONFIGS[@]}"; do
         scenario="2*2"
     elif [[ $config == *"5-5"* ]]; then
         scenario="5*5"
-    elif [[ $config == *"10-10"* ]]; then
-        scenario="10*10"
     fi
     
     n_val=""
@@ -157,17 +135,12 @@ for config in "${CONFIGS[@]}"; do
         n_val="N16"
     fi
     
-    moe_type="Original MoE"
+    moe_type="MoE+GNN"
     if [[ $config == *"HMoE-Hybrid"* ]]; then
-        moe_type="HMoE-Hybrid"
+        moe_type="HMoE-Hybrid+GNN"
     fi
     
-    gnn_type="No GNN"
-    if [[ $config == *"GoE-ProtoDepth11-Noise001"* ]]; then
-        gnn_type="GNN ProtoDepth11 Noise001"
-    fi
-    
-    variant="$scenario | $n_val | $moe_type | $gnn_type"
+    variant="$scenario | $n_val | $moe_type | ProtoDepth11 (No Noise)"
     
     echo -e "${GREEN}--- Variant: $variant ---${NC}"
     echo ""
@@ -200,6 +173,9 @@ if [ $FAILED -gt 0 ]; then
     done
 fi
 echo "=========================================="
+echo ""
+echo "All outputs saved to: ${OUTPUT_DIR}/"
+echo ""
 
 if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}All tests passed!${NC}"

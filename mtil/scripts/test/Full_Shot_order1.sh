@@ -1,9 +1,16 @@
-##!/bin/bash
+#!/bin/bash
 
 set -v
 set -e
 set -x
-GPU=3,4
+
+# Configuration: Set your data location here
+# Default: use relative path to datasets directory (one level up from mtil)
+DATA_LOCATION="${DATA_LOCATION:-$(cd "$(dirname "$0")/../../.." && pwd)/datasets}"
+
+# GPU configuration: Set to available GPU IDs (comma-separated)
+# Default: GPU 0 (change if you have multiple GPUs)
+GPU="${GPU:-0}"
 dataset=(Aircraft Caltech101 CIFAR100 DTD EuroSAT Flowers Food MNIST OxfordPet StanfordCars SUN397)
 lr=(5e-3 1e-3 5e-3 1e-3 1e-4 1e-3 1e-3 1e-4 1e-3 1e-3 1e-3)
 chooser=(Aircraft_autochooser Caltech101_autochooser CIFAR100_autochooser DTD_autochooser EuroSAT_autochooser Flowers_autochooser Food_autochooser MNIST_autochooser OxfordPet_autochooser StanfordCars_autochooser SUN397_autochooser)
@@ -23,7 +30,7 @@ for ((j = 0; j < 11; j++)); do
         --eval-datasets=${dataset_cur} \
         --load ${model_ckpt_path}/${dataset[i]}.pth \
         --load_autochooser ${model_ckpt_path}/${chooser[i]}.pth \
-        --data-location /home/dhw/yjz_workspace/data/data \
+        --data-location ${DATA_LOCATION} \
         --ffn_adapt_where AdapterDoubleEncoder \
         --ffn_adapt \
         --apply_moe \
