@@ -4,6 +4,12 @@ set -v
 set -e
 set -x
 
+# Activate conda environment if available
+if command -v conda &> /dev/null; then
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate MoE_Adapters4CL 2>/dev/null || true
+fi
+
 # Configuration: Set your data location here
 # Default: use relative path to datasets directory (one level up from mtil)
 DATA_LOCATION="${DATA_LOCATION:-$(cd "$(dirname "$0")/../../.." && pwd)/datasets}"
@@ -18,14 +24,15 @@ threshold=(655e-4 655e-4 655e-4 655e-4 655e-4 655e-4 655e-4 655e-4 655e-4 655e-4
 num=22 # experts num
 
 ###  only need to set your ckpt_path ###
-model_ckpt_path=ckpt/full_shot_order1_1000iters
+# Updated to match the actual training checkpoint path
+model_ckpt_path=ckpt/exp_withFrozen_22experts_1000epoch_11
 
 # inference
 for ((j = 0; j < 11; j++)); do
   for ((i = 0; i < ${#dataset[@]}; i++)); do
     dataset_cur=${dataset[j]}
 
-    CUDA_VISIBLE_DEVICES=${GPU} python -m src.main --eval-only \
+    CUDA_VISIBLE_DEVICES=${GPU} python3 -m src.main --eval-only \
         --train-mode=adapter \
         --eval-datasets=${dataset_cur} \
         --load ${model_ckpt_path}/${dataset[i]}.pth \

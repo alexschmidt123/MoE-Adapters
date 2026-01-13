@@ -192,31 +192,34 @@ def finetune(args):
 
 
     # save experts' frequency of activation
-    with open(frozen_path, "a") as file:
-        for i in range(12):
-            visual_choose_map = model.module.visual.transformer.resblocks[i].choose_map_image
-            text_choose_map = model.module.transformer.resblocks[i].choose_map_text
-            top_values_v, top_indices_v = torch.topk(visual_choose_map, 2)
-            top_values_t, top_indices_t = torch.topk(text_choose_map, 2)
+    # Only generate frozen list for first task (task_id 0 or when file doesn't exist)
+    # Frozen list should be generated ONCE and reused for all subsequent tasks
+    if args.task_id == 0 or not os.path.exists(frozen_path):
+        with open(frozen_path, "w") as file:
+            for i in range(12):
+                visual_choose_map = model.module.visual.transformer.resblocks[i].choose_map_image
+                text_choose_map = model.module.transformer.resblocks[i].choose_map_text
+                top_values_v, top_indices_v = torch.topk(visual_choose_map, 2)
+                top_values_t, top_indices_t = torch.topk(text_choose_map, 2)
 
-            for j in range(len(top_indices_v)):
-                item1 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.down_proj.weight'.format(i,top_indices_v[j])
-                item2 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.down_proj.bias'.format(i,top_indices_v[j])
-                item3 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.up_proj.weight'.format(i,top_indices_v[j])
-                item4 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.up_proj.bias'.format(i,top_indices_v[j])
-                file.write(item1 + "\n")
-                file.write(item2 + "\n")
-                file.write(item3 + "\n")
-                file.write(item4 + "\n")
-            for k in range(len(top_indices_t)):
-                item1 = 'transformer.resblocks.{}.adaptmlp_list.{}.down_proj.weight'.format(i, top_indices_t[k])
-                item2 = 'transformer.resblocks.{}.adaptmlp_list.{}.down_proj.bias'.format(i, top_indices_t[k])
-                item3 = 'transformer.resblocks.{}.adaptmlp_list.{}.up_proj.weight'.format(i, top_indices_t[k])
-                item4 = 'transformer.resblocks.{}.adaptmlp_list.{}.up_proj.bias'.format(i, top_indices_t[k])
-                file.write(item1 + "\n")
-                file.write(item2 + "\n")
-                file.write(item3 + "\n")
-                file.write(item4 + "\n")
+                for j in range(len(top_indices_v)):
+                    item1 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.down_proj.weight'.format(i,top_indices_v[j])
+                    item2 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.down_proj.bias'.format(i,top_indices_v[j])
+                    item3 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.up_proj.weight'.format(i,top_indices_v[j])
+                    item4 = 'visual.transformer.resblocks.{}.adaptmlp_list.{}.up_proj.bias'.format(i,top_indices_v[j])
+                    file.write(item1 + "\n")
+                    file.write(item2 + "\n")
+                    file.write(item3 + "\n")
+                    file.write(item4 + "\n")
+                for k in range(len(top_indices_t)):
+                    item1 = 'transformer.resblocks.{}.adaptmlp_list.{}.down_proj.weight'.format(i, top_indices_t[k])
+                    item2 = 'transformer.resblocks.{}.adaptmlp_list.{}.down_proj.bias'.format(i, top_indices_t[k])
+                    item3 = 'transformer.resblocks.{}.adaptmlp_list.{}.up_proj.weight'.format(i, top_indices_t[k])
+                    item4 = 'transformer.resblocks.{}.adaptmlp_list.{}.up_proj.bias'.format(i, top_indices_t[k])
+                    file.write(item1 + "\n")
+                    file.write(item2 + "\n")
+                    file.write(item3 + "\n")
+                    file.write(item4 + "\n")
         print('=======================bingo!=============================')
 
 

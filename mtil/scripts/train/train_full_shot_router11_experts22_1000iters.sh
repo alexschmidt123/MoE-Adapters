@@ -83,6 +83,13 @@ for ((i = 1; i < ${#dataset[@]}; i++)); do
     dataset_pre=${dataset[i - 1]}
 
     # continue training
+    # Reduce batch size for large datasets (SUN397) to avoid OOM
+    if [ "${dataset_cur}" = "SUN397" ]; then
+        BATCH_SIZE=32
+    else
+        BATCH_SIZE=64
+    fi
+    
     CUDA_VISIBLE_DEVICES=${GPU} python -m src.main \
         --train-mode=adapter \
         --train-dataset=${dataset_cur} \
@@ -90,6 +97,7 @@ for ((i = 1; i < ${#dataset[@]}; i++)); do
         --ls 0.2 \
         --method finetune \
         --iterations 1000 \
+        --batch-size ${BATCH_SIZE} \
         --save ckpt/exp_${exp_no} \
         --load ckpt/exp_${exp_no}/${dataset_pre}.pth \
         --data-location ${DATA_LOCATION} \

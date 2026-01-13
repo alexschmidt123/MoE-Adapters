@@ -1,9 +1,11 @@
 #!/bin/bash
-# Run TinyImageNet with 5 classes per task (20 tasks total)
+# Run TinyImageNet with 100 base classes, 5 classes per incremental task (20 step)
+# This corresponds to "20 step" in the paper table
+# Paper: "100 base classes" with 20 incremental tasks (5 classes each)
 
 CUDA_VISIBLE_DEVICES=0 python main.py \
-    --config-path configs/class \
-    --config-name tinyimagenet_100-5.yaml \
+    --config-path configs/class/tinyimagenet_configs \
+    --config-name tinyimagenet_100-5-MoE-Adapters-N2.yaml \
     dataset_root="../datasets/" \
     class_order="class_orders/tinyimagenet.yaml"
 

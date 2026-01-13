@@ -539,16 +539,107 @@ class StanfordCars(ClassificationDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "stanford cars"
-        print('1',self.location)
-        self._base_folder = pathlib.Path(self.location) / "stanford_cars"
-        print('2',self._base_folder)
-        print('3',(self._base_folder / "devkit").is_dir())
-        self.train_dataset = datasets.StanfordCars(
-            self.location, split="train", download=False, transform=self.preprocess
-        )
-        self.test_dataset = datasets.StanfordCars(
-            self.location, split="test", download=False, transform=self.preprocess
-        )
+        
+        # torchvision hardcodes "stanford_cars" (underscore), but we use "stanford-cars" (hyphen)
+        # Replace the __init__ method to use the real directory name from the start
+        original_init = datasets.StanfordCars.__init__
+        import scipy.io as sio
+        from torchvision.datasets.vision import VisionDataset
+        from torchvision.datasets.utils import verify_str_arg
+        from torchvision.datasets.folder import default_loader
+        
+        def patched_init(self_patched, root, split="train", **kwargs):
+            try:
+                import scipy.io as sio
+                import numpy as np
+            except ImportError:
+                raise RuntimeError("Scipy is not found. This dataset needs to have scipy installed: pip install scipy")
+            
+            # Call parent init
+            VisionDataset.__init__(self_patched, root, transform=kwargs.get('transform'), 
+                                  target_transform=kwargs.get('target_transform'))
+            
+            # Use stanford-cars (hyphen) instead of stanford_cars (underscore) - REAL DIRECTORY PATH
+            self_patched._split = verify_str_arg(split, "split", ("train", "test"))
+            self_patched._base_folder = pathlib.Path(root) / "stanford-cars"
+            devkit = self_patched._base_folder / "devkit"
+            
+            if self_patched._split == "train":
+                self_patched._annotations_mat_path = devkit / "cars_train_annos.mat"
+                self_patched._images_base_path = self_patched._base_folder / "cars_train"
+            else:
+                # Test annotations should also be in devkit (we created cars_test_annos_withlabels.mat there)
+                # But torchvision expects it in base folder, so check both locations
+                test_anno_base = self_patched._base_folder / "cars_test_annos_withlabels.mat"
+                test_anno_devkit = devkit / "cars_test_annos_withlabels.mat"
+                if test_anno_base.exists():
+                    self_patched._annotations_mat_path = test_anno_base
+                elif test_anno_devkit.exists():
+                    self_patched._annotations_mat_path = test_anno_devkit
+                else:
+                    self_patched._annotations_mat_path = test_anno_base  # Will fail with proper error
+                self_patched._images_base_path = self_patched._base_folder / "cars_test"
+            
+            if kwargs.get('download', False):
+                pass  # Skip download logic
+            
+            # Check existence
+            if not devkit.is_dir():
+                raise RuntimeError("Dataset not found.")
+            if not (self_patched._annotations_mat_path.exists() and self_patched._images_base_path.is_dir()):
+                raise RuntimeError("Dataset not found.")
+            
+            # Load samples and classes - only include files that actually exist
+            # This handles cases where the dataset structure doesn't perfectly match annotations
+            annotations = sio.loadmat(self_patched._annotations_mat_path, squeeze_me=True)["annotations"]
+            self_patched._samples = []
+            missing_count = 0
+            for annotation in annotations:
+                # Handle fname which might be a numpy array or string
+                fname_raw = annotation["fname"]
+                if isinstance(fname_raw, (np.ndarray, list)):
+                    # Extract string from array/list
+                    fname = str(fname_raw.item() if hasattr(fname_raw, 'item') else fname_raw[0])
+                else:
+                    fname = str(fname_raw)
+                
+                # Handle class which might be a numpy scalar
+                class_raw = annotation["class"]
+                class_idx = int(class_raw.item() if hasattr(class_raw, 'item') else class_raw) - 1
+                
+                img_path = self_patched._images_base_path / fname
+                # Also try 6-digit version if 5-digit doesn't exist
+                if not img_path.exists() and len(fname.split('.')[0]) == 5:
+                    # Try 6-digit version
+                    fname_6digit = '0' + fname
+                    img_path_6digit = self_patched._images_base_path / fname_6digit
+                    if img_path_6digit.exists():
+                        img_path = img_path_6digit
+                
+                if img_path.exists():
+                    self_patched._samples.append((str(img_path), class_idx))
+                else:
+                    missing_count += 1
+            
+            if missing_count > 0:
+                print(f"  Warning: {missing_count} files from annotations not found, using {len(self_patched._samples)} available files")
+            self_patched.classes = sio.loadmat(str(devkit / "cars_meta.mat"), squeeze_me=True)["class_names"].tolist()
+            self_patched.class_to_idx = {cls: i for i, cls in enumerate(self_patched.classes)}
+            self_patched.loader = kwargs.get('loader', default_loader)
+        
+        # Temporarily replace __init__
+        datasets.StanfordCars.__init__ = patched_init
+        
+        try:
+            self.train_dataset = datasets.StanfordCars(
+                self.location, split="train", download=False, transform=self.preprocess
+            )
+            self.test_dataset = datasets.StanfordCars(
+                self.location, split="test", download=False, transform=self.preprocess
+            )
+        finally:
+            # Restore original __init__
+            datasets.StanfordCars.__init__ = original_init
         self.build_dataloader()
         self.classnames = self.train_dataset.classes
         self.process_labels()

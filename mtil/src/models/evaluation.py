@@ -1,4 +1,6 @@
 import clip
+import json
+import os
 
 import torch
 from tqdm import tqdm
@@ -104,11 +106,17 @@ def eval_single_dataset(image_classifier,feature_extractor,Autoencoder_list, dat
 
     print(f"Top-1 accuracy: {top1:.2f}")
     # print(f"Top-5 accuracy: {top5:.2f}")
+    
+    return {"top1": top1, "top5": top5}
 
 
 def evaluate(image_classifier,feature_extractor,Autoencoder_list, args, val_preprocess):
     if args.eval_datasets is None:
         return
+    
+    results_dict = {}
+    info = vars(args)
+    
     for i, dataset_name in enumerate(args.eval_datasets):
         print("Evaluating on", dataset_name)  # Caltech101
         dataset_class = getattr(datasets, dataset_name)
@@ -118,4 +126,29 @@ def evaluate(image_classifier,feature_extractor,Autoencoder_list, args, val_prep
             batch_size=args.batch_size,
             batch_size_eval=args.batch_size_eval,
         )
-        eval_single_dataset(image_classifier,feature_extractor,Autoencoder_list, dataset, args)
+        results = eval_single_dataset(image_classifier,feature_extractor,Autoencoder_list, dataset, args)
+        
+        # Store results
+        if results:
+            results_dict[dataset_name] = results
+            info[dataset_name + ":top1"] = results["top1"]
+            info[dataset_name + ":top5"] = results["top5"]
+    
+    # Save results if results_db is specified
+    if args.results_db is not None:
+        dirname = os.path.dirname(args.results_db)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
+        with open(args.results_db, "a+") as f:
+            f.write(json.dumps(info) + "\n")
+        print(f"Results saved to {args.results_db}.")
+    else:
+        # Default: save to results directory
+        results_dir = "./results"
+        os.makedirs(results_dir, exist_ok=True)
+        results_file = os.path.join(results_dir, "mtil_test_results.jsonl")
+        with open(results_file, "a+") as f:
+            f.write(json.dumps(info) + "\n")
+        print(f"Results saved to {results_file}.")
+    
+    return results_dict

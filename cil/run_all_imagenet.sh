@@ -1,10 +1,11 @@
 #!/bin/bash
-# Run all TinyImageNet experiments: 36 configs total
-# Combinations: 2 MoE types × 2 GNN options × 3 N values × 3 scenarios
+# Run all TinyImageNet experiments: 63 configs total (large base scenarios only)
+# Combinations: 2 MoE types × 3 GNN options × 4 N values × 3 scenarios
 # MoE types: Original MoE / HMoE-Hybrid
-# GNN options: No GNN / GNN ProtoDepth11 Noise001
-# N values: N4 / N8 / N16
-# Scenarios: 2*2 / 5*5 / 10*10
+# GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001
+# N values: N2 / N4 / N8 / N16
+# Scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)
+# All scenarios use 100 base classes (aligns with original code)
 # Note: TinyImageNet downloads automatically (no manual download needed)
 
 # Configuration
@@ -13,49 +14,76 @@ DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/tinyimagenet.yaml"
 NUM_RUNS=3  # Run each config 3 times
 
-# All 36 configs organized by scenario
+# All 63 configs organized by scenario (large base only, aligns with original code)
 CONFIGS=(
-    # 2*2 scenario (12 configs)
-    "tinyimagenet_2-2-MoE-Adapters-N4.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N8.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N16.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    # 100-5 scenario (20 step, 100 base classes) (21 configs)
+    "tinyimagenet_100-5-MoE-Adapters-N2.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
     
-    # 5*5 scenario (12 configs)
-    "tinyimagenet_5-5-MoE-Adapters-N4.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N8.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N16.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    # 100-10 scenario (10 step, 100 base classes) (21 configs)
+    "tinyimagenet_100-10-MoE-Adapters-N2.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
     
-    # 10*10 scenario (12 configs)
-    "tinyimagenet_10-10-MoE-Adapters-N4.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N8.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N16.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    # 100-20 scenario (5 step, 100 base classes) (21 configs)
+    "tinyimagenet_100-20-MoE-Adapters-N2.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
+    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
 )
 
 # Colors for output
@@ -67,13 +95,14 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo "=========================================="
-echo "TinyImageNet Comprehensive Test Suite"
+echo "TinyImageNet Comprehensive Test Suite (Large Base Only)"
 echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
 echo "  - 2 MoE types: Original MoE / HMoE-Hybrid"
-echo "  - 2 GNN options: No GNN / GNN ProtoDepth11 Noise001"
-echo "  - 3 N values: N4 / N8 / N16"
-echo "  - 3 scenarios: 2*2 / 5*5 / 10*10"
+echo "  - 3 GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001"
+echo "  - N values: N2 / N4 / N8 / N16"
+echo "  - 3 scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)"
+echo "  - All scenarios use 100 base classes (aligns with original code)"
 echo "  - Dataset: TinyImageNet (downloads automatically)"
 echo ""
 echo "Runs per config: $NUM_RUNS"
@@ -137,16 +166,18 @@ echo ""
 for config in "${CONFIGS[@]}"; do
     # Extract variant info from config name
     scenario=""
-    if [[ $config == *"2-2"* ]]; then
-        scenario="2*2"
-    elif [[ $config == *"5-5"* ]]; then
-        scenario="5*5"
-    elif [[ $config == *"10-10"* ]]; then
-        scenario="10*10"
+    if [[ $config == *"100-5"* ]]; then
+        scenario="100-5 (20 step)"
+    elif [[ $config == *"100-10"* ]]; then
+        scenario="100-10 (10 step)"
+    elif [[ $config == *"100-20"* ]]; then
+        scenario="100-20 (5 step)"
     fi
     
     n_val=""
-    if [[ $config == *"N4"* ]]; then
+    if [[ $config == *"N2"* ]]; then
+        n_val="N2"
+    elif [[ $config == *"N4"* ]]; then
         n_val="N4"
     elif [[ $config == *"N8"* ]]; then
         n_val="N8"
