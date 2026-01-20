@@ -110,6 +110,11 @@ echo "Total experiments: $((${#CONFIGS[@]} * $NUM_RUNS))"
 echo "=========================================="
 echo ""
 
+# Generate run start timestamp (format: MMDDYYYY-HHMMSS)
+RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
+echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/"
+echo ""
+
 # Function to clear GPU memory
 clear_gpu_memory() {
     echo -e "${CYAN}Clearing GPU memory...${NC}"
@@ -122,6 +127,7 @@ run_experiment() {
     local config_name=$1
     local run_num=$2
     local total_runs=$3
+    local run_start_timestamp=$4
     local exit_code=0
     
     # Clear GPU memory before starting
@@ -132,12 +138,19 @@ run_experiment() {
     echo -e "${BLUE}Run: $run_num / $total_runs${NC}"
     echo -e "${BLUE}========================================${NC}"
     
-    # Run with unbuffered output (progress bars will be shown)
+    # Remove .yaml extension from config name for directory name
+    config_dir_name="${config_name%.yaml}"
+    
+    # Generate timestamp for this specific experiment
+    exp_timestamp=$(date +"%m%d%Y-%H%M%S")
+    
+    # Run with new save path: experiments/<run_start_timestamp>/<config-name>-<timestamp>/
     CUDA_VISIBLE_DEVICES=0 python -u main.py \
         --config-path "$CONFIG_PATH" \
         --config-name "$config_name" \
         dataset_root="$DATASET_ROOT" \
-        class_order="$CLASS_ORDER" || exit_code=$?
+        class_order="$CLASS_ORDER" \
+        hydra.run.dir="experiments/${run_start_timestamp}/${config_dir_name}-${exp_timestamp}" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
     clear_gpu_memory
@@ -201,7 +214,7 @@ for config in "${CONFIGS[@]}"; do
     echo ""
     
     for i in $(seq 1 $NUM_RUNS); do
-        if run_experiment "$config" "$i" "$NUM_RUNS"; then
+        if run_experiment "$config" "$i" "$NUM_RUNS" "$RUN_START_TIMESTAMP"; then
             SUCCESSFUL=$((SUCCESSFUL + 1))
         else
             FAILED=$((FAILED + 1))
@@ -228,6 +241,18 @@ if [ $FAILED -gt 0 ]; then
     done
 fi
 echo "=========================================="
+echo ""
+echo "All results saved to: experiments/${RUN_START_TIMESTAMP}/"
+echo ""
+
+# Generate results summary
+if [ -d "experiments/${RUN_START_TIMESTAMP}" ]; then
+    echo -e "${CYAN}Generating results summary...${NC}"
+    python3 generate_results_summary.py "experiments/${RUN_START_TIMESTAMP}" 2>/dev/null && \
+        echo -e "${GREEN}✓ Results summary generated successfully${NC}" || \
+        echo -e "${YELLOW}⚠ Could not generate summary${NC}"
+    echo ""
+fi
 
 if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}All tests passed!${NC}"

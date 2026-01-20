@@ -48,12 +48,19 @@ if [ "$2" != "" ]; then
 fi
 echo "=========================================="
 
-# Build command with optional epoch override
+# Generate run start timestamp (format: MMDDYYYY-HHMMSS)
+RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
+EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
+echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/${CONFIG_NAME}-${EXP_TIMESTAMP}/"
+echo ""
+
+# Build command with optional epoch override and new save path
 CMD="CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path \"$CONFIG_PATH\" \
     --config-name \"$CONFIG_NAME.yaml\" \
     dataset_root=\"../datasets/\" \
-    class_order=\"class_orders/${DATASET}.yaml\""
+    class_order=\"class_orders/${DATASET}.yaml\" \
+    hydra.run.dir=\"experiments/${RUN_START_TIMESTAMP}/${CONFIG_NAME}-${EXP_TIMESTAMP}\""
 
 # Add epoch override if provided
 if [ "$2" != "" ]; then

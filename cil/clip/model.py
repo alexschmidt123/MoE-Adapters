@@ -641,8 +641,9 @@ class ResidualAttentionBlock(nn.Module):
             train: a boolean - we only add noise at training time.
             noise_epsilon: a float
           Returns:
-            gates: a Tensor with shape [batch_size, num_experts]
+            gates: a Tensor with shape [batch_size, num_experts] (sparse, top-k only)
             load: a Tensor with shape [num_experts]
+            full_gates: a Tensor with shape [batch_size, num_experts] (dense, all experts)
         """
 
         clean_logits = x @ w_gate.to(x)
@@ -653,25 +654,30 @@ class ResidualAttentionBlock(nn.Module):
             logits = noisy_logits
         else:
             logits = clean_logits
+        
+        # Compute full (dense) gates for GNN path - all experts have non-zero values
+        full_gates = self.softmax(logits)  # [B, N] - dense, all experts
+        
         # calculate topk + 1 that will be needed for the noisy gates
         top_logits, top_indices = logits.topk(min(self.top_k + 1, self.experts_num), dim=1)
         top_k_logits = top_logits[:, :self.top_k]
         top_k_indices = top_indices[:, :self.top_k]
         top_k_gates = self.softmax(top_k_logits)
         zeros = torch.zeros_like(logits)
-        gates = zeros.scatter(1, top_k_indices, top_k_gates)
+        gates = zeros.scatter(1, top_k_indices, top_k_gates)  # sparse, top-k only
         if self.noisy_gating and self.top_k < self.experts_num and train:  # 目前未用上
             load = (self._prob_in_top_k(clean_logits, noisy_logits, noise_stddev, top_logits)).sum(0)
         else:
             load = self._gates_to_load(gates)
-        return gates, load
+        return gates, load, full_gates
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
         if global_taskid is not None:
             # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
             x_re = x.permute(1, 0, 2)[:, 0, :]  # Use CLS token: [B, D]
-            gates, load = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
+            # Get both sparse gates (for MoE) and full gates (for GNN)
+            gates, load, full_gates = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
                                                   self.w_noise_list[global_taskid])
             importance = gates.sum(0)
 
@@ -696,7 +702,7 @@ class ResidualAttentionBlock(nn.Module):
                     expert_outputs[i] = expert_outputs[i].view(expert_outputs[i].shape[0], -1)
                     i += 1
 
-            # Standard MoE combine
+            # Standard MoE combine (uses sparse gates - only top-k experts)
             y_moe = dispatcher.combine(expert_outputs)
             y_moe = y_moe.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
             
@@ -744,14 +750,17 @@ class ResidualAttentionBlock(nn.Module):
                 # Pass is_train flag for noisy adjacency (noise only during training)
                 A, X_all, Y_all = self.graph_mixer(x_re, is_train=self.is_train)  # A: [B,N,N], X_all: [B,N,D], Y_all: [B,N,D]
                 
-                # Fuse graph messages using the same gates from router
-                # y_graph[b] = sum_e gates[b,e] * Y_all[b,e]
-                y_graph = torch.einsum("bn,bnd->bd", gates, Y_all)  # [B, D]
+                # FIXED: Use full_gates (dense) instead of gates (sparse)
+                # This allows ALL experts to contribute via GNN, not just top-k
+                # y_graph[b] = sum_e full_gates[b,e] * Y_all[b,e]
+                y_graph = torch.einsum("bn,bnd->bd", full_gates, Y_all)  # [B, D]
                 
                 # Broadcast over sequence length
                 y_graph = y_graph.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
                 
                 # Add graph contribution with learnable weight
+                # y_moe: contributions from top-k experts (sparse)
+                # y_graph: contributions from ALL experts (dense, via GNN)
                 y_fused = y_moe + self.alpha_graph * y_graph
                 
                 # Optional entropy regularization on adjacency matrix

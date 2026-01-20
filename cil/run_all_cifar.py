@@ -15,6 +15,11 @@ import sys
 import subprocess
 import time
 from pathlib import Path
+from datetime import datetime
+
+# Import summary generator
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from generate_results_summary import generate_summary, save_summary
 
 # Configuration
 CONFIG_PATH = "configs/class/cifar_configs"
@@ -87,7 +92,7 @@ def clear_gpu_memory():
         pass
     time.sleep(2)  # Give GPU time to free memory
 
-def run_experiment(config_name, run_num, total_runs):
+def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
     """Run a single experiment"""
     # Clear GPU memory before starting
     clear_gpu_memory()
@@ -97,14 +102,21 @@ def run_experiment(config_name, run_num, total_runs):
     print(f"{Colors.BLUE}Run: {run_num} / {total_runs}{Colors.NC}")
     print(f"{Colors.BLUE}{'='*40}{Colors.NC}")
     
-    # Build command
+    # Remove .yaml extension from config name for directory name
+    config_dir_name = config_name.replace('.yaml', '')
+    
+    # Generate timestamp for this specific experiment
+    exp_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
+    
+    # Build command with new save path: experiments/<run_start_timestamp>/<config-name>-<timestamp>/
     cmd = [
         sys.executable,  # Use the same Python interpreter
         "main.py",
         "--config-path", CONFIG_PATH,
         "--config-name", config_name,
         f"dataset_root={DATASET_ROOT}",
-        f"class_order={CLASS_ORDER}"
+        f"class_order={CLASS_ORDER}",
+        f"hydra.run.dir=experiments/{run_start_timestamp}/{config_dir_name}-{exp_timestamp}"
     ]
     
     # Set environment variables
@@ -132,6 +144,9 @@ def run_experiment(config_name, run_num, total_runs):
         return False
 
 def main():
+    # Generate run start timestamp (format: MMDDYYYY-HHMMSS)
+    run_start_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
+    
     print("=" * 50)
     print("CIFAR-100 Comprehensive Test Suite")
     print("=" * 50)
@@ -143,6 +158,7 @@ def main():
     print()
     print(f"Runs per config: {NUM_RUNS}")
     print(f"Total experiments: {len(CONFIGS) * NUM_RUNS}")
+    print(f"Results will be saved to: experiments/{run_start_timestamp}/")
     print("=" * 50)
     print()
     
@@ -190,7 +206,7 @@ def main():
         print()
         
         for i in range(1, NUM_RUNS + 1):
-            if run_experiment(config, i, NUM_RUNS):
+            if run_experiment(config, i, NUM_RUNS, run_start_timestamp):
                 successful += 1
             else:
                 failed += 1
@@ -212,6 +228,22 @@ def main():
         for failed_config in failed_configs:
             print(f"{Colors.RED}  - {failed_config}{Colors.NC}")
     print("=" * 50)
+    
+    print(f"\n{Colors.CYAN}All results saved to: experiments/{run_start_timestamp}/{Colors.NC}\n")
+    
+    # Generate results summary
+    run_folder = f"experiments/{run_start_timestamp}"
+    if Path(run_folder).exists():
+        print(f"{Colors.CYAN}Generating results summary...{Colors.NC}")
+        try:
+            summary = generate_summary(run_folder)
+            if summary:
+                save_summary(run_folder, summary)
+                print(f"{Colors.GREEN}✓ Results summary generated successfully{Colors.NC}")
+            else:
+                print(f"{Colors.YELLOW}⚠ No results found to summarize{Colors.NC}")
+        except Exception as e:
+            print(f"{Colors.YELLOW}⚠ Could not generate summary: {e}{Colors.NC}")
     
     if failed == 0:
         print(f"{Colors.GREEN}All tests passed!{Colors.NC}")
