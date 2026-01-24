@@ -23,24 +23,29 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from generate_results_summary import generate_summary, save_summary
 
-# Configuration
-CONFIG_PATH = "configs/class/tinyimagenet_configs"
-DATASET_ROOT = "../datasets/"
-CLASS_ORDER = "class_orders/tinyimagenet.yaml"
+# Get script directory for cross-platform path resolution
+SCRIPT_DIR = Path(__file__).parent.absolute()
+
+# Configuration (paths relative to script directory for Hydra, absolute for file checks)
+CONFIG_PATH_REL = "configs/class/tinyimagenet_configs"  # Relative path for Hydra
+CONFIG_PATH_ABS = str(SCRIPT_DIR / "configs" / "class" / "tinyimagenet_configs")  # Absolute for file checks
+DATASET_ROOT = str(SCRIPT_DIR.parent / "datasets")
+CLASS_ORDER = str(SCRIPT_DIR / "class_orders" / "tinyimagenet.yaml")
 NUM_RUNS = 3  # Run each config 3 times
 
 def check_tinyimagenet_dataset():
     """Check if TinyImageNet dataset is available (downloads automatically)"""
     # TinyImageNet downloads automatically via continuum library
     # Just verify the dataset directory exists or can be created
-    dataset_path = os.path.join(os.path.dirname(DATASET_ROOT), "datasets", "tinyimagenet")
+    dataset_path = SCRIPT_DIR.parent / "datasets" / "tinyimagenet"
     
     # The dataset will be downloaded automatically when first accessed
     # So we just return True - the download happens in the dataset loader
     return True
 
 def config_file_exists(config_name: str) -> bool:
-    return (Path(CONFIG_PATH) / config_name).exists()
+    config_file = Path(CONFIG_PATH_ABS) / config_name
+    return config_file.exists()
 
 
 def build_configs():
@@ -129,14 +134,18 @@ def run_experiment(config_name, run_name, extra_args, run_num, total_runs, run_s
     exp_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
     
     # Build command with new save path: experiments/<run_start_timestamp>/<config-name>-<timestamp>/
+    # Use relative paths since we'll run from SCRIPT_DIR
+    experiments_dir = str(SCRIPT_DIR / "experiments" / run_start_timestamp)
+    run_dir = str(Path(experiments_dir) / f"{config_dir_name}-{exp_timestamp}")
+    
     cmd = [
         sys.executable,  # Use the same Python interpreter
-        "main.py",
-        "--config-path", CONFIG_PATH,
+        "main.py",  # Relative path since we run from SCRIPT_DIR
+        "--config-path", CONFIG_PATH_REL,
         "--config-name", config_name,
         f"dataset_root={DATASET_ROOT}",
         f"class_order={CLASS_ORDER}",
-        f"hydra.run.dir=experiments/{run_start_timestamp}/{config_dir_name}-{exp_timestamp}"
+        f"hydra.run.dir={run_dir}"
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -148,8 +157,10 @@ def run_experiment(config_name, run_name, extra_args, run_num, total_runs, run_s
     env["PYTHONUNBUFFERED"] = "1"  # Unbuffered output
     
     # Run experiment with proper output handling
+    # Change to script directory to ensure relative paths work correctly
     exit_code = subprocess.call(
         cmd, 
+        cwd=str(SCRIPT_DIR),  # Run from script directory
         env=env,
         stdout=sys.stdout,  # Keep stdout for important messages
         stderr=sys.stderr   # Keep stderr for errors
@@ -187,7 +198,8 @@ def main():
     print()
     print(f"Runs per config: {NUM_RUNS}")
     print(f"Total experiments: {len(CONFIGS) * NUM_RUNS}")
-    print(f"Results will be saved to: experiments/{run_start_timestamp}/")
+    results_dir = str(SCRIPT_DIR / "experiments" / run_start_timestamp)
+    print(f"Results will be saved to: {results_dir}")
     print("=" * 50)
     print()
     
@@ -256,10 +268,10 @@ def main():
         for failed_config in failed_configs:
             print(f"{Colors.RED}  - {failed_config}{Colors.NC}")
     print("=" * 50)
-    print(f"\n{Colors.CYAN}All results saved to: experiments/{run_start_timestamp}/{Colors.NC}\n")
+    run_folder = str(SCRIPT_DIR / "experiments" / run_start_timestamp)
+    print(f"\n{Colors.CYAN}All results saved to: {run_folder}{Colors.NC}\n")
     
     # Generate results summary
-    run_folder = f"experiments/{run_start_timestamp}"
     if Path(run_folder).exists():
         print(f"{Colors.CYAN}Generating results summary...{Colors.NC}")
         try:
