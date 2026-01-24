@@ -58,17 +58,23 @@ def build_configs():
 
                 if not config_file_exists(config_name):
                     if n_val == 32:
+                        # Try fallback to N16 config with override
                         fallback_name = config_name.replace("N32", "N16")
-                        if not config_file_exists(fallback_name):
-                            raise FileNotFoundError(f"Missing config: {fallback_name}")
-                        config_name = fallback_name
-                        method_name = run_name.replace(f"cifar100_{scenario}-", "").replace(".yaml", "")
-                        extra_args.extend([
-                            "model.num_experts=32",
-                            f"method={method_name}",
-                        ])
+                        if config_file_exists(fallback_name):
+                            config_name = fallback_name
+                            method_name = run_name.replace(f"cifar100_{scenario}-", "").replace(".yaml", "")
+                            extra_args.extend([
+                                "model.num_experts=32",
+                                f"method={method_name}",
+                            ])
+                        else:
+                            # Config doesn't exist, skip it
+                            print(f"{Colors.YELLOW}⚠ Skipping missing config: {config_name} (fallback {fallback_name} also missing){Colors.NC}")
+                            continue
                     else:
-                        raise FileNotFoundError(f"Missing config: {config_name}")
+                        # Config doesn't exist, skip it
+                        print(f"{Colors.YELLOW}⚠ Skipping missing config: {config_name}{Colors.NC}")
+                        continue
 
                 configs.append({
                     "config_name": config_name,
@@ -81,10 +87,14 @@ def build_configs():
                 })
     return configs
 
+# ANSI color codes (works on Windows 10+ with ANSI support, or use colorama)
+# Try to enable colorama for better Windows compatibility (optional dependency)
+try:
+    import colorama
+    colorama.init()  # Initialize colorama for Windows ANSI support
+except ImportError:
+    pass  # colorama not installed, ANSI codes will work on Windows 10+ anyway
 
-CONFIGS = build_configs()
-
-# ANSI color codes (for terminals that support them)
 class Colors:
     GREEN = '\033[0;32m'
     BLUE = '\033[0;34m'
@@ -165,10 +175,23 @@ def run_experiment(config_name, run_name, extra_args, run_num, total_runs, run_s
 
 def main():
     run_start_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
+    
+    # Build configs (some may be skipped if missing)
+    print(f"{Colors.CYAN}Building config list...{Colors.NC}")
+    CONFIGS = build_configs()
+    
+    # Calculate expected total: 4 N values × 2 scenarios × 2 MoE types × 2 noise options = 32
+    EXPECTED_TOTAL = 4 * 2 * 2 * 2
+    found_count = len(CONFIGS)
+    missing_count = EXPECTED_TOTAL - found_count
+    
     print("=" * 50)
     print("CIFAR-100 Test Suite (New Configs)")
     print("=" * 50)
-    print(f"Total configs: {len(CONFIGS)}")
+    print(f"Expected configs: {EXPECTED_TOTAL}")
+    print(f"Found configs: {found_count}")
+    if missing_count > 0:
+        print(f"{Colors.YELLOW}Missing configs: {missing_count} (will be skipped){Colors.NC}")
     print("  - 4 N values: N4 / N8 / N16 / N32")
     print("  - 2 scenarios: 2*2 / 5*5")
     print("  - 2 MoE types: MoE+GNN / HMoE-Hybrid+GNN")

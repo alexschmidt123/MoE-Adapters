@@ -1,0 +1,54 @@
+# Configuration for CIFAR-100: 10-10 scenario, N=32, Original, GoE-ProtoDepth11-Noise001
+# Generated unified config for comprehensive experiments
+
+defaults:
+  - ../reference/cifar100_10-10-MoE-Adapters
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N32-GoE-ProtoDepth11-Noise001"
+
+# Dataset configuration
+dataset_root: ""
+class_order: ""
+workdir: ""
+scenario: "class"
+prompt_template: "a bad photo of a {}."
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+dataset: "cifar100"
+batch_size: 128
+increment: ${initial_increment}
+initial_increment: 10
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+lr: 1e-3
+ls: 0.0
+
+# Model configuration
+model:
+  # MoE parameters
+  num_experts: 32           # Number of experts (N=32)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Standard MoE (no HMoE)
+  hmoe_enabled: false
+  
+  # Graph mixer settings
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # Noisy adjacency matrix settings
+  graph_use_noisy_adjacency: true  # Enable noise for adjacency exploration during training
+  graph_noise_epsilon: 0.001      # Base noise level (epsilon = 0.001)
+  
+  # Header layer configurations: Proto depth=11
+  # proto: 11-layer MLP per expert (d_model -> 512 -> 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 -> 1 -> d_model)
+  graph_proto_layers: [512, 256, 128, 64, 32, 16, 8, 4, 2, 1]   # 10 hidden layers (depth=11)
+  graph_proto_activation: "gelu"                                 # GELU activation
+  graph_proto_use_norm: true                                     # Use LayerNorm between layers
+  graph_proto_dropout: 0.1                                       # Add dropout for regularization

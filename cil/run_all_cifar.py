@@ -49,6 +49,7 @@ def build_configs():
     ]
 
     configs = []
+    missing_configs = []
     for scenario in scenarios:
         for n_val in n_values:
             n_tag = f"N{n_val}"
@@ -59,17 +60,23 @@ def build_configs():
 
                 if not config_file_exists(config_name):
                     if n_val == 32:
+                        # Try fallback to N16 config with override
                         fallback_name = config_name.replace("N32", "N16")
-                        if not config_file_exists(fallback_name):
-                            raise FileNotFoundError(f"Missing config: {fallback_name}")
-                        config_name = fallback_name
-                        method_name = run_name.replace(f"cifar100_{scenario}-", "").replace(".yaml", "")
-                        extra_args.extend([
-                            "model.num_experts=32",
-                            f"method={method_name}",
-                        ])
+                        if config_file_exists(fallback_name):
+                            config_name = fallback_name
+                            method_name = run_name.replace(f"cifar100_{scenario}-", "").replace(".yaml", "")
+                            extra_args.extend([
+                                "model.num_experts=32",
+                                f"method={method_name}",
+                            ])
+                        else:
+                            # Config doesn't exist, skip it
+                            missing_configs.append(f"{scenario} {n_tag} {variant['moe_type']} {variant['gnn_type']}")
+                            continue
                     else:
-                        raise FileNotFoundError(f"Missing config: {config_name}")
+                        # Config doesn't exist, skip it
+                        missing_configs.append(f"{scenario} {n_tag} {variant['moe_type']} {variant['gnn_type']}")
+                        continue
 
                 configs.append({
                     "config_name": config_name,
@@ -80,12 +87,19 @@ def build_configs():
                     "gnn_type": variant["gnn_type"],
                     "extra_args": extra_args,
                 })
+    
+    # Store missing configs for reporting
+    build_configs.missing = missing_configs
     return configs
 
-
-CONFIGS = build_configs()
-
 # ANSI color codes (works on Windows 10+ with ANSI support, or use colorama)
+# Try to enable colorama for better Windows compatibility (optional dependency)
+try:
+    import colorama
+    colorama.init()  # Initialize colorama for Windows ANSI support
+except ImportError:
+    pass  # colorama not installed, ANSI codes will work on Windows 10+ anyway
+
 class Colors:
     GREEN = '\033[0;32m'
     BLUE = '\033[0;34m'
@@ -168,10 +182,27 @@ def main():
     # Generate run start timestamp (format: MMDDYYYY-HHMMSS)
     run_start_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
     
+    # Build configs (some may be skipped if missing)
+    print(f"{Colors.CYAN}Building config list...{Colors.NC}")
+    CONFIGS = build_configs()
+    
+    # Calculate expected total: 2 MoE types × 3 GNN options × 4 N values × 3 scenarios = 72
+    EXPECTED_TOTAL = 2 * 3 * 4 * 3
+    found_count = len(CONFIGS)
+    missing_count = EXPECTED_TOTAL - found_count
+    missing_list = getattr(build_configs, 'missing', [])
+    
     print("=" * 50)
     print("CIFAR-100 Comprehensive Test Suite")
     print("=" * 50)
-    print(f"Total configs: {len(CONFIGS)}")
+    print(f"Expected configs: {EXPECTED_TOTAL}")
+    print(f"Found configs: {found_count}")
+    if missing_count > 0:
+        print(f"{Colors.YELLOW}Missing configs: {missing_count} (will be skipped){Colors.NC}")
+        if missing_list:
+            print(f"{Colors.YELLOW}Missing config details:{Colors.NC}")
+            for missing in sorted(missing_list):
+                print(f"{Colors.YELLOW}  - {missing}{Colors.NC}")
     print("  - 2 MoE types: Original MoE / HMoE-Hybrid")
     print("  - 3 GNN options: No GNN / GNN ProtoDepth11 / GNN ProtoDepth11 Noise001")
     print("  - 4 N values: N4 / N8 / N16 / N32")
