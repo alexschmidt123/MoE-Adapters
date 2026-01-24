@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Run all new CIFAR-100 test experiments: 12 configs total
-Combinations: 3 N values × 2 scenarios × 2 MoE types
-N values: N4 / N8 / N16
+Run all new CIFAR-100 test experiments: 48 configs total
+Combinations: 4 N values × 2 scenarios × 2 MoE types × 2 noise options
+N values: N4 / N8 / N16 / N32
 Scenarios: 2*2 / 5*5
 MoE types: MoE+GNN(ProtoDepth11) / HMoE-Hybrid+GNN(ProtoDepth11)
-All configs use GNN with ProtoDepth=11 and NO noise
+Noise options: No Noise / Noise001
 
 Cross-platform Python version - works on Windows, Linux, and macOS
 """
@@ -28,24 +28,56 @@ CLASS_ORDER = "class_orders/cifar100.yaml"
 NUM_RUNS = 3  # Run each config 3 times
 OUTPUT_DIR = "experiments/outputs"  # Output directory
 
-# All 12 new configs
-CONFIGS = [
-    # 2*2 scenario - MoE+GNN (6 configs)
-    "cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11.yaml",
-    "cifar100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11.yaml",
-    "cifar100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11.yaml",
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    
-    # 5*5 scenario - MoE+GNN (6 configs)
-    "cifar100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11.yaml",
-    "cifar100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11.yaml",
-    "cifar100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11.yaml",
-    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-]
+def config_file_exists(config_name: str) -> bool:
+    return (Path(CONFIG_PATH) / config_name).exists()
+
+
+def build_configs():
+    scenarios = ["2-2", "5-5"]
+    n_values = [4, 8, 16, 32]
+    variants = [
+        {"suffix": "-GoE-ProtoDepth11", "moe_type": "MoE+GNN", "gnn_type": "ProtoDepth11 (No Noise)"},
+        {"suffix": "-GoE-ProtoDepth11-Noise001", "moe_type": "MoE+GNN", "gnn_type": "ProtoDepth11 Noise001"},
+        {"suffix": "-HMoE-Hybrid-GoE-ProtoDepth11", "moe_type": "HMoE-Hybrid+GNN", "gnn_type": "ProtoDepth11 (No Noise)"},
+        {"suffix": "-HMoE-Hybrid-GoE-ProtoDepth11-Noise001", "moe_type": "HMoE-Hybrid+GNN", "gnn_type": "ProtoDepth11 Noise001"},
+    ]
+
+    configs = []
+    for scenario in scenarios:
+        for n_val in n_values:
+            n_tag = f"N{n_val}"
+            for variant in variants:
+                config_name = f"cifar100_{scenario}-MoE-Adapters-{n_tag}{variant['suffix']}.yaml"
+                run_name = config_name.replace(".yaml", "")
+                extra_args = []
+
+                if not config_file_exists(config_name):
+                    if n_val == 32:
+                        fallback_name = config_name.replace("N32", "N16")
+                        if not config_file_exists(fallback_name):
+                            raise FileNotFoundError(f"Missing config: {fallback_name}")
+                        config_name = fallback_name
+                        method_name = run_name.replace(f"cifar100_{scenario}-", "").replace(".yaml", "")
+                        extra_args.extend([
+                            "model.num_experts=32",
+                            f"method={method_name}",
+                        ])
+                    else:
+                        raise FileNotFoundError(f"Missing config: {config_name}")
+
+                configs.append({
+                    "config_name": config_name,
+                    "run_name": run_name,
+                    "scenario": scenario,
+                    "n_val": n_tag,
+                    "moe_type": variant["moe_type"],
+                    "gnn_type": variant["gnn_type"],
+                    "extra_args": extra_args,
+                })
+    return configs
+
+
+CONFIGS = build_configs()
 
 # ANSI color codes (for terminals that support them)
 class Colors:
@@ -67,7 +99,7 @@ def clear_gpu_memory():
     except Exception:
         pass  # Ignore if torch is not available
 
-def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
+def run_experiment(config_name, run_name, extra_args, run_num, total_runs, run_start_timestamp):
     """Run a single experiment"""
     # Clear GPU memory before starting
     clear_gpu_memory()
@@ -78,7 +110,7 @@ def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
     print(f"{Colors.BLUE}{'='*40}{Colors.NC}")
     
     # Remove .yaml extension from config name for directory name
-    config_dir_name = config_name.replace('.yaml', '')
+    config_dir_name = run_name
     
     # Generate timestamp for this specific experiment
     exp_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
@@ -94,6 +126,8 @@ def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
         f"hydra.run.dir=experiments/{run_start_timestamp}/{config_dir_name}-{exp_timestamp}",
         f"hydra.job.name={config_dir_name}_run{run_num}"
     ]
+    if extra_args:
+        cmd.extend(extra_args)
     
     # Set environment variables
     env = os.environ.copy()
@@ -118,37 +152,16 @@ def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
         print(f"{Colors.RED}✗ Run {run_num}/{total_runs} failed: {config_name} (exit code: {exit_code}){Colors.NC}")
         return False
 
-def extract_variant_info(config_name):
-    """Extract variant information from config name"""
-    scenario = ""
-    if "2-2" in config_name:
-        scenario = "2*2"
-    elif "5-5" in config_name:
-        scenario = "5*5"
-    
-    n_val = ""
-    if "N4" in config_name:
-        n_val = "N4"
-    elif "N8" in config_name:
-        n_val = "N8"
-    elif "N16" in config_name:
-        n_val = "N16"
-    
-    moe_type = "MoE+GNN"
-    if "HMoE-Hybrid" in config_name:
-        moe_type = "HMoE-Hybrid+GNN"
-    
-    return f"{scenario} | {n_val} | {moe_type} | ProtoDepth11 (No Noise)"
-
 def main():
+    run_start_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
     print("=" * 50)
     print("CIFAR-100 Test Suite (New Configs)")
     print("=" * 50)
     print(f"Total configs: {len(CONFIGS)}")
-    print("  - 3 N values: N4 / N8 / N16")
+    print("  - 4 N values: N4 / N8 / N16 / N32")
     print("  - 2 scenarios: 2*2 / 5*5")
     print("  - 2 MoE types: MoE+GNN / HMoE-Hybrid+GNN")
-    print("  - All with ProtoDepth=11, NO noise")
+    print("  - 2 noise options: No Noise / Noise001")
     print("")
     print(f"Runs per config: {NUM_RUNS}")
     print(f"Total experiments: {len(CONFIGS) * NUM_RUNS}")
@@ -172,16 +185,24 @@ def main():
     print("")
     
     for config in CONFIGS:
-        variant = extract_variant_info(config)
+        scenario = config["scenario"].replace("-", "*")
+        variant = f"{scenario} | {config['n_val']} | {config['moe_type']} | {config['gnn_type']}"
         print(f"{Colors.GREEN}--- Variant: {variant} ---{Colors.NC}")
         print("")
         
         for i in range(1, NUM_RUNS + 1):
-            if run_experiment(config, i, NUM_RUNS, run_start_timestamp):
+            if run_experiment(
+                config["config_name"],
+                config["run_name"],
+                config["extra_args"],
+                i,
+                NUM_RUNS,
+                run_start_timestamp
+            ):
                 successful += 1
             else:
                 failed += 1
-                failed_configs.append(f"{config} (run {i})")
+                failed_configs.append(f"{config['run_name']} (run {i})")
             print("")  # Add blank line between runs
         print("")
     

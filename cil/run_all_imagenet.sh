@@ -1,9 +1,9 @@
 #!/bin/bash
-# Run all TinyImageNet experiments: 63 configs total (large base scenarios only)
+# Run all TinyImageNet experiments: 72 configs total (large base scenarios only)
 # Combinations: 2 MoE types × 3 GNN options × 4 N values × 3 scenarios
 # MoE types: Original MoE / HMoE-Hybrid
 # GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001
-# N values: N2 / N4 / N8 / N16
+# N values: N4 / N8 / N16 / N32
 # Scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)
 # All scenarios use 100 base classes (aligns with original code)
 # Note: TinyImageNet downloads automatically (no manual download needed)
@@ -14,77 +14,46 @@ DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/tinyimagenet.yaml"
 NUM_RUNS=3  # Run each config 3 times
 
-# All 63 configs organized by scenario (large base only, aligns with original code)
-CONFIGS=(
-    # 100-5 scenario (20 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-5-MoE-Adapters-N2.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    
-    # 100-10 scenario (10 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-10-MoE-Adapters-N2.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    
-    # 100-20 scenario (5 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-20-MoE-Adapters-N2.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N2-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml"
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+# Build configs dynamically (supports N32 via override when missing)
+SCENARIOS=("100-5" "100-10" "100-20")
+N_VALUES=(4 8 16 32)
+VARIANTS=(
+    "|Original MoE|No GNN"
+    "-GoE-ProtoDepth11|Original MoE|GNN ProtoDepth11"
+    "-GoE-ProtoDepth11-Noise001|Original MoE|GNN ProtoDepth11 Noise001"
+    "-HMoE-Hybrid|HMoE-Hybrid|No GNN"
+    "-HMoE-Hybrid-GoE-ProtoDepth11|HMoE-Hybrid|GNN ProtoDepth11"
+    "-HMoE-Hybrid-GoE-ProtoDepth11-Noise001|HMoE-Hybrid|GNN ProtoDepth11 Noise001"
 )
+
+CONFIGS=()
+for scenario in "${SCENARIOS[@]}"; do
+    for n_val in "${N_VALUES[@]}"; do
+        for variant in "${VARIANTS[@]}"; do
+            IFS='|' read -r suffix moe_type gnn_type <<< "$variant"
+            config_name="tinyimagenet_${scenario}-MoE-Adapters-N${n_val}${suffix}.yaml"
+            run_name="${config_name%.yaml}"
+            extra_args=""
+
+            if [ ! -f "${CONFIG_PATH}/${config_name}" ]; then
+                if [ "$n_val" -eq 32 ]; then
+                    fallback_name="${config_name/N32/N16}"
+                    if [ ! -f "${CONFIG_PATH}/${fallback_name}" ]; then
+                        echo "Missing config: ${fallback_name}"
+                        exit 1
+                    fi
+                    config_name="${fallback_name}"
+                    extra_args="model.num_experts=32 method=${run_name}"
+                else
+                    echo "Missing config: ${config_name}"
+                    exit 1
+                fi
+            fi
+
+            CONFIGS+=("${config_name}|${scenario}|N${n_val}|${moe_type}|${gnn_type}|${extra_args}|${run_name}")
+        done
+    done
+done
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -100,7 +69,7 @@ echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
 echo "  - 2 MoE types: Original MoE / HMoE-Hybrid"
 echo "  - 3 GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001"
-echo "  - N values: N2 / N4 / N8 / N16"
+echo "  - N values: N4 / N8 / N16 / N32"
 echo "  - 3 scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)"
 echo "  - All scenarios use 100 base classes (aligns with original code)"
 echo "  - Dataset: TinyImageNet (downloads automatically)"
@@ -125,9 +94,11 @@ clear_gpu_memory() {
 # Function to run a single experiment
 run_experiment() {
     local config_name=$1
-    local run_num=$2
-    local total_runs=$3
-    local run_start_timestamp=$4
+    local run_name=$2
+    local extra_args_str=$3
+    local run_num=$4
+    local total_runs=$5
+    local run_start_timestamp=$6
     local exit_code=0
     
     # Clear GPU memory before starting
@@ -139,18 +110,24 @@ run_experiment() {
     echo -e "${BLUE}========================================${NC}"
     
     # Remove .yaml extension from config name for directory name
-    config_dir_name="${config_name%.yaml}"
+    config_dir_name="${run_name}"
     
     # Generate timestamp for this specific experiment
     exp_timestamp=$(date +"%m%d%Y-%H%M%S")
     
     # Run with new save path: experiments/<run_start_timestamp>/<config-name>-<timestamp>/
-    CUDA_VISIBLE_DEVICES=0 python -u main.py \
-        --config-path "$CONFIG_PATH" \
-        --config-name "$config_name" \
-        dataset_root="$DATASET_ROOT" \
-        class_order="$CLASS_ORDER" \
-        hydra.run.dir="experiments/${run_start_timestamp}/${config_dir_name}-${exp_timestamp}" || exit_code=$?
+    cmd=(python -u main.py
+        --config-path "$CONFIG_PATH"
+        --config-name "$config_name"
+        dataset_root="$DATASET_ROOT"
+        class_order="$CLASS_ORDER"
+        hydra.run.dir="experiments/${run_start_timestamp}/${config_dir_name}-${exp_timestamp}"
+    )
+    if [ -n "$extra_args_str" ]; then
+        read -r -a extra_args <<< "$extra_args_str"
+        cmd+=("${extra_args[@]}")
+    fi
+    CUDA_VISIBLE_DEVICES=0 "${cmd[@]}" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
     clear_gpu_memory
@@ -176,49 +153,26 @@ echo -e "${CYAN}Starting TinyImageNet Experiments${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-for config in "${CONFIGS[@]}"; do
-    # Extract variant info from config name
-    scenario=""
-    if [[ $config == *"100-5"* ]]; then
+for entry in "${CONFIGS[@]}"; do
+    IFS='|' read -r config_name scenario n_val moe_type gnn_type extra_args run_name <<< "$entry"
+    if [[ $scenario == "100-5" ]]; then
         scenario="100-5 (20 step)"
-    elif [[ $config == *"100-10"* ]]; then
+    elif [[ $scenario == "100-10" ]]; then
         scenario="100-10 (10 step)"
-    elif [[ $config == *"100-20"* ]]; then
+    elif [[ $scenario == "100-20" ]]; then
         scenario="100-20 (5 step)"
     fi
-    
-    n_val=""
-    if [[ $config == *"N2"* ]]; then
-        n_val="N2"
-    elif [[ $config == *"N4"* ]]; then
-        n_val="N4"
-    elif [[ $config == *"N8"* ]]; then
-        n_val="N8"
-    elif [[ $config == *"N16"* ]]; then
-        n_val="N16"
-    fi
-    
-    moe_type="Original MoE"
-    if [[ $config == *"HMoE-Hybrid"* ]]; then
-        moe_type="HMoE-Hybrid"
-    fi
-    
-    gnn_type="No GNN"
-    if [[ $config == *"GoE-ProtoDepth11-Noise001"* ]]; then
-        gnn_type="GNN ProtoDepth11 Noise001"
-    fi
-    
     variant="$scenario | $n_val | $moe_type | $gnn_type"
     
     echo -e "${GREEN}--- Variant: $variant ---${NC}"
     echo ""
     
     for i in $(seq 1 $NUM_RUNS); do
-        if run_experiment "$config" "$i" "$NUM_RUNS" "$RUN_START_TIMESTAMP"; then
+        if run_experiment "$config_name" "$run_name" "$extra_args" "$i" "$NUM_RUNS" "$RUN_START_TIMESTAMP"; then
             SUCCESSFUL=$((SUCCESSFUL + 1))
         else
             FAILED=$((FAILED + 1))
-            FAILED_CONFIGS+=("$config (run $i)")
+            FAILED_CONFIGS+=("$run_name (run $i)")
         fi
         echo ""  # Add blank line between runs
     done

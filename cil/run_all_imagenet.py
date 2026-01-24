@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Run all TinyImageNet experiments: 63 configs total (large base scenarios only)
+Run all TinyImageNet experiments: 72 configs total (large base scenarios only)
 Combinations: 2 MoE types × 3 GNN options × 4 N values × 3 scenarios
 MoE types: Original MoE / HMoE-Hybrid
-GNN options: No GNN / GNN ProtoDepth11 Noise001 / GNN ProtoDepth11 (no noise)
-N values: N2 / N4 / N8 / N16
+GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001
+N values: N4 / N8 / N16 / N32
 Scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)
 All scenarios use 100 base classes (aligns with original code)
 
@@ -39,77 +39,58 @@ def check_tinyimagenet_dataset():
     # So we just return True - the download happens in the dataset loader
     return True
 
-# All 63 configs organized by scenario (large base only, aligns with original code)
-CONFIGS = [
-    # 100-5 scenario (20 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-5-MoE-Adapters-N2.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N2-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    
-    # 100-10 scenario (10 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-10-MoE-Adapters-N2.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N2-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    
-    # 100-20 scenario (5 step, 100 base classes) (21 configs)
-    "tinyimagenet_100-20-MoE-Adapters-N2.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N2-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N2-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11.yaml",
-    "tinyimagenet_100-20-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml",
-]
+def config_file_exists(config_name: str) -> bool:
+    return (Path(CONFIG_PATH) / config_name).exists()
+
+
+def build_configs():
+    scenarios = ["100-5", "100-10", "100-20"]
+    n_values = [4, 8, 16, 32]
+    variants = [
+        {"suffix": "", "moe_type": "Original MoE", "gnn_type": "No GNN"},
+        {"suffix": "-GoE-ProtoDepth11", "moe_type": "Original MoE", "gnn_type": "GNN ProtoDepth11"},
+        {"suffix": "-GoE-ProtoDepth11-Noise001", "moe_type": "Original MoE", "gnn_type": "GNN ProtoDepth11 Noise001"},
+        {"suffix": "-HMoE-Hybrid", "moe_type": "HMoE-Hybrid", "gnn_type": "No GNN"},
+        {"suffix": "-HMoE-Hybrid-GoE-ProtoDepth11", "moe_type": "HMoE-Hybrid", "gnn_type": "GNN ProtoDepth11"},
+        {"suffix": "-HMoE-Hybrid-GoE-ProtoDepth11-Noise001", "moe_type": "HMoE-Hybrid", "gnn_type": "GNN ProtoDepth11 Noise001"},
+    ]
+
+    configs = []
+    for scenario in scenarios:
+        for n_val in n_values:
+            n_tag = f"N{n_val}"
+            for variant in variants:
+                config_name = f"tinyimagenet_{scenario}-MoE-Adapters-{n_tag}{variant['suffix']}.yaml"
+                run_name = config_name.replace(".yaml", "")
+                extra_args = []
+
+                if not config_file_exists(config_name):
+                    if n_val == 32:
+                        fallback_name = config_name.replace("N32", "N16")
+                        if not config_file_exists(fallback_name):
+                            raise FileNotFoundError(f"Missing config: {fallback_name}")
+                        config_name = fallback_name
+                        method_name = run_name.replace(f"tinyimagenet_{scenario}-", "").replace(".yaml", "")
+                        extra_args.extend([
+                            "model.num_experts=32",
+                            f"method={method_name}",
+                        ])
+                    else:
+                        raise FileNotFoundError(f"Missing config: {config_name}")
+
+                configs.append({
+                    "config_name": config_name,
+                    "run_name": run_name,
+                    "scenario": scenario,
+                    "n_val": n_tag,
+                    "moe_type": variant["moe_type"],
+                    "gnn_type": variant["gnn_type"],
+                    "extra_args": extra_args,
+                })
+    return configs
+
+
+CONFIGS = build_configs()
 
 # ANSI color codes (works on Windows 10+ with ANSI support, or use colorama)
 class Colors:
@@ -131,7 +112,7 @@ def clear_gpu_memory():
         pass
     time.sleep(2)  # Give GPU time to free memory
 
-def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
+def run_experiment(config_name, run_name, extra_args, run_num, total_runs, run_start_timestamp):
     """Run a single experiment"""
     # Clear GPU memory before starting
     clear_gpu_memory()
@@ -142,7 +123,7 @@ def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
     print(f"{Colors.BLUE}{'='*40}{Colors.NC}")
     
     # Remove .yaml extension from config name for directory name
-    config_dir_name = config_name.replace('.yaml', '')
+    config_dir_name = run_name
     
     # Generate timestamp for this specific experiment
     exp_timestamp = datetime.now().strftime("%m%d%Y-%H%M%S")
@@ -157,6 +138,8 @@ def run_experiment(config_name, run_num, total_runs, run_start_timestamp):
         f"class_order={CLASS_ORDER}",
         f"hydra.run.dir=experiments/{run_start_timestamp}/{config_dir_name}-{exp_timestamp}"
     ]
+    if extra_args:
+        cmd.extend(extra_args)
     
     # Set environment variables
     env = os.environ.copy()
@@ -198,7 +181,7 @@ def main():
     print(f"Total configs: {len(CONFIGS)}")
     print("  - 2 MoE types: Original MoE / HMoE-Hybrid")
     print("  - 3 GNN options: No GNN / GNN ProtoDepth11 (no noise) / GNN ProtoDepth11 Noise001")
-    print("  - N values: N2 / N4 / N8 / N16")
+    print("  - N values: N4 / N8 / N16 / N32")
     print("  - 3 scenarios: 100-5 (20 step) / 100-10 (10 step) / 100-20 (5 step)")
     print("  - All scenarios use 100 base classes (aligns with original code)")
     print()
@@ -230,35 +213,32 @@ def main():
         elif "100-20" in config:
             scenario = "100-20 (5 step)"
         
-        n_val = ""
-        if "N2" in config:
-            n_val = "N2"
-        elif "N4" in config:
-            n_val = "N4"
-        elif "N8" in config:
-            n_val = "N8"
-        elif "N16" in config:
-            n_val = "N16"
-        
-        moe_type = "Original MoE"
-        if "HMoE-Hybrid" in config:
-            moe_type = "HMoE-Hybrid"
-        
-        gnn_type = "No GNN"
-        if "GoE-ProtoDepth11-Noise001" in config:
-            gnn_type = "GNN ProtoDepth11 Noise001"
-        
-        variant = f"{scenario} | {n_val} | {moe_type} | {gnn_type}"
+        scenario_label = config["scenario"]
+        if scenario_label == "100-5":
+            scenario_label = "100-5 (20 step)"
+        elif scenario_label == "100-10":
+            scenario_label = "100-10 (10 step)"
+        elif scenario_label == "100-20":
+            scenario_label = "100-20 (5 step)"
+
+        variant = f"{scenario_label} | {config['n_val']} | {config['moe_type']} | {config['gnn_type']}"
         
         print(f"{Colors.GREEN}--- Variant: {variant} ---{Colors.NC}")
         print()
         
         for i in range(1, NUM_RUNS + 1):
-            if run_experiment(config, i, NUM_RUNS, run_start_timestamp):
+            if run_experiment(
+                config["config_name"],
+                config["run_name"],
+                config["extra_args"],
+                i,
+                NUM_RUNS,
+                run_start_timestamp
+            ):
                 successful += 1
             else:
                 failed += 1
-                failed_configs.append(f"{config} (run {i})")
+                failed_configs.append(f"{config['run_name']} (run {i})")
             print()  # Add blank line between runs
         print()
     

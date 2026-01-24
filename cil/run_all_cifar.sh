@@ -1,9 +1,9 @@
 #!/bin/bash
-# Run all CIFAR-100 experiments: 36 configs total
-# Combinations: 2 MoE types × 2 GNN options × 3 N values × 3 scenarios
+# Run all CIFAR-100 experiments: 72 configs total
+# Combinations: 2 MoE types × 3 GNN options × 4 N values × 3 scenarios
 # MoE types: Original MoE / HMoE-Hybrid
-# GNN options: No GNN / GNN ProtoDepth11 Noise001
-# N values: N4 / N8 / N16
+# GNN options: No GNN / GNN ProtoDepth11 / GNN ProtoDepth11 Noise001
+# N values: N4 / N8 / N16 / N32
 # Scenarios: 2*2 / 5*5 / 10*10
 
 # Configuration
@@ -12,50 +12,46 @@ DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/cifar100.yaml"
 NUM_RUNS=3  # Run each config 3 times
 
-# All 36 configs organized by scenario
-CONFIGS=(
-    # 2*2 scenario (12 configs)
-    "cifar100_2-2-MoE-Adapters-N4.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N8.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N16.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_2-2-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    
-    # 5*5 scenario (12 configs)
-    "cifar100_5-5-MoE-Adapters-N4.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N8.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N16.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_5-5-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    
-    # 10*10 scenario (12 configs)
-    "cifar100_10-10-MoE-Adapters-N4.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N8.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N8-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N16.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-GoE-ProtoDepth11-Noise001.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-HMoE-Hybrid.yaml"
-    "cifar100_10-10-MoE-Adapters-N16-HMoE-Hybrid-GoE-ProtoDepth11-Noise001.yaml"
+# Build configs dynamically (supports N32 via override when missing)
+SCENARIOS=("2-2" "5-5" "10-10")
+N_VALUES=(4 8 16 32)
+VARIANTS=(
+    "|Original MoE|No GNN"
+    "-GoE-ProtoDepth11|Original MoE|GNN ProtoDepth11"
+    "-GoE-ProtoDepth11-Noise001|Original MoE|GNN ProtoDepth11 Noise001"
+    "-HMoE-Hybrid|HMoE-Hybrid|No GNN"
+    "-HMoE-Hybrid-GoE-ProtoDepth11|HMoE-Hybrid|GNN ProtoDepth11"
+    "-HMoE-Hybrid-GoE-ProtoDepth11-Noise001|HMoE-Hybrid|GNN ProtoDepth11 Noise001"
 )
+
+CONFIGS=()
+for scenario in "${SCENARIOS[@]}"; do
+    for n_val in "${N_VALUES[@]}"; do
+        for variant in "${VARIANTS[@]}"; do
+            IFS='|' read -r suffix moe_type gnn_type <<< "$variant"
+            config_name="cifar100_${scenario}-MoE-Adapters-N${n_val}${suffix}.yaml"
+            run_name="${config_name%.yaml}"
+            extra_args=""
+
+            if [ ! -f "${CONFIG_PATH}/${config_name}" ]; then
+                if [ "$n_val" -eq 32 ]; then
+                    fallback_name="${config_name/N32/N16}"
+                    if [ ! -f "${CONFIG_PATH}/${fallback_name}" ]; then
+                        echo "Missing config: ${fallback_name}"
+                        exit 1
+                    fi
+                    config_name="${fallback_name}"
+                    extra_args="model.num_experts=32 method=${run_name}"
+                else
+                    echo "Missing config: ${config_name}"
+                    exit 1
+                fi
+            fi
+
+            CONFIGS+=("${config_name}|${scenario}|N${n_val}|${moe_type}|${gnn_type}|${extra_args}|${run_name}")
+        done
+    done
+done
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -70,8 +66,8 @@ echo "CIFAR-100 Comprehensive Test Suite"
 echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
 echo "  - 2 MoE types: Original MoE / HMoE-Hybrid"
-echo "  - 2 GNN options: No GNN / GNN ProtoDepth11 Noise001"
-echo "  - 3 N values: N4 / N8 / N16"
+echo "  - 3 GNN options: No GNN / GNN ProtoDepth11 / GNN ProtoDepth11 Noise001"
+echo "  - 4 N values: N4 / N8 / N16 / N32"
 echo "  - 3 scenarios: 2*2 / 5*5 / 10*10"
 echo ""
 echo "Runs per config: $NUM_RUNS"
@@ -94,9 +90,11 @@ clear_gpu_memory() {
 # Function to run a single experiment
 run_experiment() {
     local config_name=$1
-    local run_num=$2
-    local total_runs=$3
-    local run_start_timestamp=$4
+    local run_name=$2
+    local extra_args_str=$3
+    local run_num=$4
+    local total_runs=$5
+    local run_start_timestamp=$6
     local exit_code=0
     
     # Clear GPU memory before starting
@@ -108,19 +106,25 @@ run_experiment() {
     echo -e "${BLUE}========================================${NC}"
     
     # Remove .yaml extension from config name for directory name
-    config_dir_name="${config_name%.yaml}"
+    config_dir_name="${run_name}"
     
     # Generate timestamp for this specific experiment
     exp_timestamp=$(date +"%m%d%Y-%H%M%S")
     
     # Run with new save path: experiments/<run_start_timestamp>/<config-name>-<timestamp>/
-    CUDA_VISIBLE_DEVICES=0 python -u main.py \
-        --config-path "$CONFIG_PATH" \
-        --config-name "$config_name" \
-        dataset_root="$DATASET_ROOT" \
-        class_order="$CLASS_ORDER" \
-        hydra.run.dir="experiments/${run_start_timestamp}/${config_dir_name}-${exp_timestamp}" \
-        hydra.job.name="${config_dir_name}_run${run_num}" || exit_code=$?
+    cmd=(python -u main.py
+        --config-path "$CONFIG_PATH"
+        --config-name "$config_name"
+        dataset_root="$DATASET_ROOT"
+        class_order="$CLASS_ORDER"
+        hydra.run.dir="experiments/${run_start_timestamp}/${config_dir_name}-${exp_timestamp}"
+        hydra.job.name="${config_dir_name}_run${run_num}"
+    )
+    if [ -n "$extra_args_str" ]; then
+        read -r -a extra_args <<< "$extra_args_str"
+        cmd+=("${extra_args[@]}")
+    fi
+    CUDA_VISIBLE_DEVICES=0 "${cmd[@]}" || exit_code=$?
     
     # Clear GPU memory after completion (success or failure)
     clear_gpu_memory
@@ -146,47 +150,20 @@ echo -e "${CYAN}Starting CIFAR-100 Experiments${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-for config in "${CONFIGS[@]}"; do
-    # Extract variant info from config name
-    scenario=""
-    if [[ $config == *"2-2"* ]]; then
-        scenario="2*2"
-    elif [[ $config == *"5-5"* ]]; then
-        scenario="5*5"
-    elif [[ $config == *"10-10"* ]]; then
-        scenario="10*10"
-    fi
-    
-    n_val=""
-    if [[ $config == *"N4"* ]]; then
-        n_val="N4"
-    elif [[ $config == *"N8"* ]]; then
-        n_val="N8"
-    elif [[ $config == *"N16"* ]]; then
-        n_val="N16"
-    fi
-    
-    moe_type="Original MoE"
-    if [[ $config == *"HMoE-Hybrid"* ]]; then
-        moe_type="HMoE-Hybrid"
-    fi
-    
-    gnn_type="No GNN"
-    if [[ $config == *"GoE-ProtoDepth11-Noise001"* ]]; then
-        gnn_type="GNN ProtoDepth11 Noise001"
-    fi
-    
+for entry in "${CONFIGS[@]}"; do
+    IFS='|' read -r config_name scenario n_val moe_type gnn_type extra_args run_name <<< "$entry"
+    scenario="${scenario//-/*}"
     variant="$scenario | $n_val | $moe_type | $gnn_type"
     
     echo -e "${GREEN}--- Variant: $variant ---${NC}"
     echo ""
     
     for i in $(seq 1 $NUM_RUNS); do
-        if run_experiment "$config" "$i" "$NUM_RUNS" "$RUN_START_TIMESTAMP"; then
+        if run_experiment "$config_name" "$run_name" "$extra_args" "$i" "$NUM_RUNS" "$RUN_START_TIMESTAMP"; then
             SUCCESSFUL=$((SUCCESSFUL + 1))
         else
             FAILED=$((FAILED + 1))
-            FAILED_CONFIGS+=("$config (run $i)")
+            FAILED_CONFIGS+=("$run_name (run $i)")
         fi
         echo ""  # Add blank line between runs
     done
