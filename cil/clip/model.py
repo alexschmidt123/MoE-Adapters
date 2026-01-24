@@ -472,13 +472,19 @@ class ResidualAttentionBlock(nn.Module):
                                     )
             self.adaptmlp_list.append(self.adaptmlp)
 
-        # Graph-over-Experts (GoE) mixer configuration
+        # Graph-over-Experts (GoE) mixer configuration - PROPER STRUCTURE
         if cfg is not None and hasattr(cfg, 'model'):
             self.graph_enabled = getattr(cfg.model, 'graph_mixer_enabled', False)
             if self.graph_enabled:
-                # Import here to avoid circular dependency issues
-                # Use absolute import since script runs from cil/ directory
-                import graph_mixer
+                # Import proper GNN structure
+                try:
+                    import graph_mixer_proper
+                    use_proper_gnn = True
+                except ImportError:
+                    # Fallback to old implementation if proper GNN not available
+                    import graph_mixer
+                    use_proper_gnn = False
+                
                 # Helper to get list from config (None if not present)
                 def get_list_attr(cfg_obj, attr_name, default=None):
                     val = getattr(cfg_obj, attr_name, default)
@@ -489,40 +495,73 @@ class ResidualAttentionBlock(nn.Module):
                         return list(val)
                     return val
                 
-                self.graph_mixer = graph_mixer.GraphExpertMixer(
-                    d_model=d_model,
-                    num_experts=self.experts_num,
-                    symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
-                    add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
-                    use_noisy_adjacency=getattr(cfg.model, 'graph_use_noisy_adjacency', True),
-                    noise_epsilon=float(getattr(cfg.model, 'graph_noise_epsilon', 0.01)),
-                    # Header layer configurations
-                    graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
-                    graph_head_activation=str(getattr(cfg.model, 'graph_head_activation', 'none')),
-                    graph_head_use_norm=bool(getattr(cfg.model, 'graph_head_use_norm', False)),
-                    graph_head_dropout=float(getattr(cfg.model, 'graph_head_dropout', 0.0)),
-                    graph_noise_head_layers=get_list_attr(cfg.model, 'graph_noise_head_layers', None),
-                    graph_noise_head_activation=str(getattr(cfg.model, 'graph_noise_head_activation', 'none')),
-                    graph_noise_head_use_norm=bool(getattr(cfg.model, 'graph_noise_head_use_norm', False)),
-                    graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
-                    graph_proto_activation=str(getattr(cfg.model, 'graph_proto_activation', 'none')),
-                    graph_proto_use_norm=bool(getattr(cfg.model, 'graph_proto_use_norm', False)),
-                    graph_proto_dropout=float(getattr(cfg.model, 'graph_proto_dropout', 0.0)),
-                    graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
-                    graph_proj_activation=str(getattr(cfg.model, 'graph_proj_activation', 'none')),
-                    graph_proj_use_norm=bool(getattr(cfg.model, 'graph_proj_use_norm', False)),
-                )
+                # Hybrid approach: Use coarse router before GNN only for large N (>= 8)
+                use_coarse_router = self.experts_num >= 8
+                coarse_router_k = int(getattr(cfg.model, 'graph_coarse_router_k', self.experts_num // 2))
+                
+                if use_proper_gnn:
+                    # PROPER GNN: Input → GNN → Router → Experts → Output
+                    self.graph_mixer = graph_mixer_proper.ProperGraphExpertMixer(
+                        d_model=d_model,
+                        num_experts=self.experts_num,
+                        num_layers=int(getattr(cfg.model, 'graph_num_layers', 2)),
+                        hidden_dim=int(getattr(cfg.model, 'graph_hidden_dim', d_model)),
+                        use_coarse_router=use_coarse_router,
+                        coarse_router_k=coarse_router_k,
+                        symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
+                        add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
+                        activation=str(getattr(cfg.model, 'graph_activation', 'gelu')),
+                        dropout=float(getattr(cfg.model, 'graph_dropout', 0.0)),
+                        layer_norm=bool(getattr(cfg.model, 'graph_layer_norm', True)),
+                        residual=bool(getattr(cfg.model, 'graph_residual', True)),
+                        graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
+                        graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
+                        graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
+                    )
+                    self.use_proper_gnn = True
+                    if use_coarse_router:
+                        print(f"GNN: Using hybrid approach - coarse router (top-{coarse_router_k}) before GNN for N={self.experts_num}")
+                    else:
+                        print(f"GNN: Processing all {self.experts_num} experts (N < 8, no coarse router)")
+                else:
+                    # Fallback to old implementation
+                    self.graph_mixer = graph_mixer.GraphExpertMixer(
+                        d_model=d_model,
+                        num_experts=self.experts_num,
+                        symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
+                        add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
+                        use_noisy_adjacency=getattr(cfg.model, 'graph_use_noisy_adjacency', True),
+                        noise_epsilon=float(getattr(cfg.model, 'graph_noise_epsilon', 0.01)),
+                        graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
+                        graph_head_activation=str(getattr(cfg.model, 'graph_head_activation', 'none')),
+                        graph_head_use_norm=bool(getattr(cfg.model, 'graph_head_use_norm', False)),
+                        graph_head_dropout=float(getattr(cfg.model, 'graph_head_dropout', 0.0)),
+                        graph_noise_head_layers=get_list_attr(cfg.model, 'graph_noise_head_layers', None),
+                        graph_noise_head_activation=str(getattr(cfg.model, 'graph_noise_head_activation', 'none')),
+                        graph_noise_head_use_norm=bool(getattr(cfg.model, 'graph_noise_head_use_norm', False)),
+                        graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
+                        graph_proto_activation=str(getattr(cfg.model, 'graph_proto_activation', 'none')),
+                        graph_proto_use_norm=bool(getattr(cfg.model, 'graph_proto_use_norm', False)),
+                        graph_proto_dropout=float(getattr(cfg.model, 'graph_proto_dropout', 0.0)),
+                        graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
+                        graph_proj_activation=str(getattr(cfg.model, 'graph_proj_activation', 'none')),
+                        graph_proj_use_norm=bool(getattr(cfg.model, 'graph_proj_use_norm', False)),
+                    )
+                    self.use_proper_gnn = False
+                # Keep alpha_graph for backward compatibility (old GNN path)
                 self.alpha_graph = nn.Parameter(
                     torch.tensor(float(getattr(cfg.model, 'graph_alpha_init', 0.0)))
-                )
-                self.graph_entropy_weight = float(getattr(cfg.model, 'graph_entropy_weight', 0.0))
+                ) if not use_proper_gnn else None
+                self.graph_entropy_weight = float(getattr(cfg.model, 'graph_entropy_weight', 0.0)) if not use_proper_gnn else 0.0
             else:
                 self.graph_mixer = None
+                self.use_proper_gnn = False
                 self.alpha_graph = None
                 self.graph_entropy_weight = 0.0
         else:
             self.graph_enabled = False
             self.graph_mixer = None
+            self.use_proper_gnn = False
             self.alpha_graph = None
             self.graph_entropy_weight = 0.0
         
@@ -676,11 +715,81 @@ class ResidualAttentionBlock(nn.Module):
         if global_taskid is not None:
             # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
             x_re = x.permute(1, 0, 2)[:, 0, :]  # Use CLS token: [B, D]
-            # Get both sparse gates (for MoE) and full gates (for GNN)
-            gates, load, full_gates = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
-                                                  self.w_noise_list[global_taskid])
+            
+            # PROPER STRUCTURE: Input → GNN → Router → Experts → Output
+            if self.graph_enabled and self.graph_mixer is not None and hasattr(self, 'use_proper_gnn') and self.use_proper_gnn:
+                # Step 1: GNN processes input first
+                x_gnn = self.graph_mixer(x_re, is_train=self.is_train)  # [B, D] - GNN-processed representation
+                
+                # Step 2: Router uses GNN output to select experts
+                gates, load, full_gates = self.noisy_top_k_gating(
+                    x_gnn,  # Use GNN output instead of original input
+                    self.is_train, 
+                    self.router_list[global_taskid],
+                    self.w_noise_list[global_taskid]
+                )
+                
+                # Step 3: Experts process GNN output (not original input)
+                # Expand GNN output to sequence length for experts
+                x_gnn_seq = x_gnn.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
+                x_gnn_seq = x_gnn_seq.permute(1, 0, 2)  # [L, B, D] to match x format
+                
+                dispatcher = SparseDispatcher(self.experts_num, gates)
+                expert_inputs = dispatcher.dispatch(x_gnn_seq.permute(1, 0, 2).view(x_gnn_seq.shape[1], -1))
+                expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
+                                                                              x_gnn_seq.shape[0], x_gnn_seq.shape[2]).to(x_gnn_seq), add_residual=False)
+                                  for i in range(self.experts_num)]
+                
+                i = 0
+                while i < len(expert_outputs):
+                    if expert_outputs[i].shape[0] == 0:
+                        expert_outputs.pop(i)
+                    else:
+                        expert_outputs[i] = expert_outputs[i].view(expert_outputs[i].shape[0], -1)
+                        i += 1
+                
+                # Step 4: Combine expert outputs
+                y_output = dispatcher.combine(expert_outputs)
+                y_output = y_output.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
+                
+            else:
+                # OLD STRUCTURE: Router → Experts (no GNN, or using old GNN implementation)
+                # Get gates from original input
+                gates, load, full_gates = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
+                                                      self.w_noise_list[global_taskid])
+                
+                # Use original input for experts
+                dispatcher = SparseDispatcher(self.experts_num, gates)
+                expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))
+                expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
+                                                                              x.shape[0], x.shape[2]).to(x), add_residual=False)
+                                  for i in range(self.experts_num)]
+                
+                i = 0
+                while i < len(expert_outputs):
+                    if expert_outputs[i].shape[0] == 0:
+                        expert_outputs.pop(i)
+                    else:
+                        expert_outputs[i] = expert_outputs[i].view(expert_outputs[i].shape[0], -1)
+                        i += 1
+                
+                y_output = dispatcher.combine(expert_outputs)
+                y_output = y_output.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
+                
+                # Old GNN path (if enabled but not using proper GNN)
+                if self.graph_enabled and self.graph_mixer is not None:
+                    # Fallback to old implementation
+                    A, X_all, Y_all = self.graph_mixer(x_re, is_train=self.is_train)
+                    y_graph = torch.einsum("bn,bnd->bd", full_gates, Y_all)  # [B, D]
+                    y_graph = y_graph.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
+                    # Note: alpha_graph removed in proper structure, but keep for backward compatibility
+                    if hasattr(self, 'alpha_graph') and self.alpha_graph is not None:
+                        y_output = y_output + self.alpha_graph * y_graph
+                    else:
+                        y_output = y_output + y_graph
+            
+            # Track expert usage
             importance = gates.sum(0)
-
             nonzero_indices = torch.nonzero(gates)
             counter = Counter(nonzero_indices[:, 1].tolist())
             for number, count in counter.items():
@@ -688,95 +797,37 @@ class ResidualAttentionBlock(nn.Module):
                     self.choose_map_text[number] = self.choose_map_text[number] + count
                 else:
                     self.choose_map_image[number] = self.choose_map_image[number] + count
-            dispatcher = SparseDispatcher(self.experts_num, gates)
-            expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))
-            expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
-                                                                          x.shape[0], x.shape[2]).to(x), add_residual=False)
-                              for i in range(self.experts_num)]
-
-            i = 0
-            while i < len(expert_outputs):
-                if expert_outputs[i].shape[0] == 0:
-                    expert_outputs.pop(i)
-                else:
-                    expert_outputs[i] = expert_outputs[i].view(expert_outputs[i].shape[0], -1)
-                    i += 1
-
-            # Standard MoE combine (uses sparse gates - only top-k experts)
-            y_moe = dispatcher.combine(expert_outputs)
-            y_moe = y_moe.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
             
             # HMoE: Compute balanced activation loss (if enabled)
             if self.hmoe_enabled and self.is_train:
                 # P-Penalty loss
                 if self.hmoe_balanced_activation_weight > 0:
                     hmoe_loss = self.compute_hmoe_balanced_activation_loss(gates, self.expert_capacities)
-                    # Accumulate extra loss (will be added in training loop)
                     if self.extra_losses is None:
                         self.extra_losses = self.hmoe_balanced_activation_weight * hmoe_loss
                     else:
                         self.extra_losses = self.extra_losses + self.hmoe_balanced_activation_weight * hmoe_loss
                 
-                # Entropy regularization on gating probabilities (encourages diverse expert usage)
+                # Entropy regularization on gating probabilities
                 if self.hmoe_gate_entropy_weight > 0:
-                    # Compute entropy: -sum(p * log(p)) per sample, averaged
-                    # Higher entropy = more uniform distribution = more diverse expert usage
-                    p = gates.clamp_min(1e-9)  # Avoid log(0)
-                    gate_entropy = -(p * p.log()).sum(dim=-1).mean()  # [B] -> scalar
-                    # We want to maximize entropy (diversity), so minimize negative entropy
+                    p = gates.clamp_min(1e-9)
+                    gate_entropy = -(p * p.log()).sum(dim=-1).mean()
                     entropy_loss = -gate_entropy
-                    # Accumulate extra loss
                     if self.extra_losses is None:
                         self.extra_losses = self.hmoe_gate_entropy_weight * entropy_loss
                     else:
                         self.extra_losses = self.extra_losses + self.hmoe_gate_entropy_weight * entropy_loss
                 
-                # Load balancing loss (standard MoE load balancing)
-                # Encourages uniform distribution of examples across experts
+                # Load balancing loss
                 if self.hmoe_load_balance_weight > 0:
-                    # importance = sum of gate values per expert (measures total expert usage)
-                    # load = number of examples routed to each expert
-                    importance = gates.sum(0)  # [num_experts]
+                    importance = gates.sum(0)
                     load_balance_loss = self.cv_squared(importance) + self.cv_squared(load)
-                    # Accumulate extra loss
                     if self.extra_losses is None:
                         self.extra_losses = self.hmoe_load_balance_weight * load_balance_loss
                     else:
                         self.extra_losses = self.extra_losses + self.hmoe_load_balance_weight * load_balance_loss
             
-            # Graph-over-Experts path (if enabled)
-            if self.graph_enabled and self.graph_mixer is not None:
-                # Compute graph mixing using the same pooled representation
-                # Pass is_train flag for noisy adjacency (noise only during training)
-                A, X_all, Y_all = self.graph_mixer(x_re, is_train=self.is_train)  # A: [B,N,N], X_all: [B,N,D], Y_all: [B,N,D]
-                
-                # FIXED: Use full_gates (dense) instead of gates (sparse)
-                # This allows ALL experts to contribute via GNN, not just top-k
-                # y_graph[b] = sum_e full_gates[b,e] * Y_all[b,e]
-                y_graph = torch.einsum("bn,bnd->bd", full_gates, Y_all)  # [B, D]
-                
-                # Broadcast over sequence length
-                y_graph = y_graph.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
-                
-                # Add graph contribution with learnable weight
-                # y_moe: contributions from top-k experts (sparse)
-                # y_graph: contributions from ALL experts (dense, via GNN)
-                y_fused = y_moe + self.alpha_graph * y_graph
-                
-                # Optional entropy regularization on adjacency matrix
-                if self.graph_entropy_weight > 0 and self.is_train:
-                    # Row entropy: -sum(p * log(p)) per row, averaged over batch and rows
-                    p = A.clamp_min(1e-9)
-                    row_entropy = -(p * p.log()).sum(dim=-1).mean()
-                    # Accumulate extra loss (will be added in training loop)
-                    if self.extra_losses is None:
-                        self.extra_losses = self.graph_entropy_weight * row_entropy
-                    else:
-                        self.extra_losses = self.extra_losses + self.graph_entropy_weight * row_entropy
-            else:
-                y_fused = y_moe
-            
-            x = x + self.mlp(self.ln_2(x)) + y_fused.permute(1, 0, 2)
+            x = x + self.mlp(self.ln_2(x)) + y_output.permute(1, 0, 2)
         else:
             x = x + self.mlp(self.ln_2(x))
         return x
