@@ -493,7 +493,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
                     dispatcher = SparseDispatcher(self.experts_num, gates)
-                    expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))
+                    expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).reshape(x.shape[1], -1))
 
                     expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
                                         x.shape[0],x.shape[2]).to(x), add_residual=False) for i in range(self.experts_num)]  # 11个experts 一个router
@@ -507,7 +507,7 @@ class ResidualAttentionBlock(nn.Module):
                             i += 1
 
                     y = dispatcher.combine(expert_outputs)
-                    y = y.view(x.shape[1],x.shape[0],x.shape[2])
+                    y = y.reshape(x.shape[1],x.shape[0],x.shape[2])
                     x = x + self.mlp(self.ln_2(x)) + y.permute(1, 0, 2)
                 else:
                     x_re = x.permute(1, 0, 2)[:, 0, :]
@@ -515,7 +515,7 @@ class ResidualAttentionBlock(nn.Module):
                                                           self.w_noise)
 
                     dispatcher = SparseDispatcher(self.experts_num, gates)
-                    expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))  #
+                    expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).reshape(x.shape[1], -1))  #
                     expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
                                 x.shape[0], x.shape[2]).to(x), add_residual=False) for i in range(self.experts_num)]  # 11 experts 1 router
                     i = 0
@@ -527,7 +527,7 @@ class ResidualAttentionBlock(nn.Module):
                             i += 1
 
                     y = dispatcher.combine(expert_outputs)
-                    y = y.view(x.shape[1], x.shape[0], x.shape[2])
+                    y = y.reshape(x.shape[1], x.shape[0], x.shape[2])
                     x = x + self.mlp(self.ln_2(x)) + y.permute(1, 0, 2)
 
             else:  # one adapter

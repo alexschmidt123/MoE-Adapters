@@ -735,7 +735,7 @@ class ResidualAttentionBlock(nn.Module):
                 x_gnn_seq = x_gnn_seq.permute(1, 0, 2)  # [L, B, D] to match x format
                 
                 dispatcher = SparseDispatcher(self.experts_num, gates)
-                expert_inputs = dispatcher.dispatch(x_gnn_seq.permute(1, 0, 2).view(x_gnn_seq.shape[1], -1))
+                expert_inputs = dispatcher.dispatch(x_gnn_seq.permute(1, 0, 2).reshape(x_gnn_seq.shape[1], -1))
                 expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
                                                                               x_gnn_seq.shape[0], x_gnn_seq.shape[2]).to(x_gnn_seq), add_residual=False)
                                   for i in range(self.experts_num)]
@@ -750,7 +750,7 @@ class ResidualAttentionBlock(nn.Module):
                 
                 # Step 4: Combine expert outputs
                 y_output = dispatcher.combine(expert_outputs)
-                y_output = y_output.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
+                y_output = y_output.reshape(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
                 
             else:
                 # OLD STRUCTURE: Router → Experts (no GNN, or using old GNN implementation)
@@ -760,7 +760,7 @@ class ResidualAttentionBlock(nn.Module):
                 
                 # Use original input for experts
                 dispatcher = SparseDispatcher(self.experts_num, gates)
-                expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).view(x.shape[1], -1))
+                expert_inputs = dispatcher.dispatch(x.permute(1, 0, 2).reshape(x.shape[1], -1))
                 expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
                                                                               x.shape[0], x.shape[2]).to(x), add_residual=False)
                                   for i in range(self.experts_num)]
@@ -774,7 +774,7 @@ class ResidualAttentionBlock(nn.Module):
                         i += 1
                 
                 y_output = dispatcher.combine(expert_outputs)
-                y_output = y_output.view(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
+                y_output = y_output.reshape(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
                 
                 # Old GNN path (if enabled but not using proper GNN)
                 if self.graph_enabled and self.graph_mixer is not None:

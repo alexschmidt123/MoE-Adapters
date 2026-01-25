@@ -1,21 +1,22 @@
 #!/bin/bash
-# Run all new CIFAR-100 test experiments: 48 configs total
-# Combinations: 4 N values × 2 scenarios × 2 MoE types × 2 noise options
-# N values: N4 / N8 / N16 / N32
-# Scenarios: 2*2 / 5*5
-# MoE types: MoE+GNN(ProtoDepth11) / HMoE-Hybrid+GNN(ProtoDepth11)
-# Noise options: No Noise / Noise001
+# Short test for GNN configs: 8 configs total (less than 10 for quick testing)
+# Combinations: 2 N values × 1 scenario × 4 GNN variants
+# N values: N4 / N8
+# Scenarios: 2*2 (smallest, fastest)
+# GNN variants: All 4 combinations (MoE/HMoE-Hybrid × No Noise/Noise001)
+# 
+# This is a quick test to verify GNN fixes work correctly.
 
 # Configuration
 CONFIG_PATH="configs/class/cifar_configs"
 DATASET_ROOT="../datasets/"
 CLASS_ORDER="class_orders/cifar100.yaml"
-NUM_RUNS=3  # Run each config 3 times
+NUM_RUNS=1  # Run each config once for quick testing
 OUTPUT_DIR="experiments/outputs"  # Output directory
 
-# Build configs dynamically (supports N32 via override when missing)
-SCENARIOS=("2-2" "5-5")
-N_VALUES=(4 8 16 32)
+# Build configs dynamically - Short test: 1 scenario × 2 N values × 4 variants = 8 configs
+SCENARIOS=("2-2")  # Only smallest scenario for quick testing
+N_VALUES=(4 8)  # Only N4 and N8 for quick testing
 VARIANTS=(
     "-GoE-ProtoDepth11|MoE+GNN|ProtoDepth11 (No Noise)"
     "-GoE-ProtoDepth11-Noise001|MoE+GNN|ProtoDepth11 Noise001"
@@ -61,13 +62,14 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo "=========================================="
-echo "CIFAR-100 Test Suite (New Configs)"
+echo "CIFAR-100 GNN Short Test Suite (Quick Test)"
 echo "=========================================="
 echo "Total configs: ${#CONFIGS[@]}"
-echo "  - 4 N values: N4 / N8 / N16 / N32"
-echo "  - 2 scenarios: 2*2 / 5*5"
-echo "  - 2 MoE types: MoE+GNN / HMoE-Hybrid+GNN"
-echo "  - 2 noise options: No Noise / Noise001"
+echo "  - 1 scenario: 2*2 (smallest, fastest)"
+echo "  - 2 N values: N4 / N8"
+echo "  - 4 GNN variants: All combinations (MoE/HMoE × No Noise/Noise001)"
+echo ""
+echo -e "\033[0;36mThis is a quick test to verify GNN fixes work correctly.\033[0m"
 echo ""
 echo "Runs per config: $NUM_RUNS"
 echo "Total experiments: $((${#CONFIGS[@]} * $NUM_RUNS))"

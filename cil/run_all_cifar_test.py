@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Run all new CIFAR-100 test experiments: 48 configs total
-Combinations: 4 N values × 2 scenarios × 2 MoE types × 2 noise options
-N values: N4 / N8 / N16 / N32
-Scenarios: 2*2 / 5*5
-MoE types: MoE+GNN(ProtoDepth11) / HMoE-Hybrid+GNN(ProtoDepth11)
-Noise options: No Noise / Noise001
+Short test for GNN configs: 8 configs total (less than 10 for quick testing)
+Combinations: 2 N values × 1 scenario × 4 GNN variants
+N values: N4 / N8
+Scenarios: 2*2 (smallest, fastest)
+GNN variants: All 4 combinations (MoE/HMoE-Hybrid × No Noise/Noise001)
+
+This is a quick test to verify GNN fixes work correctly.
 
 Cross-platform Python version - works on Windows, Linux, and macOS
 """
@@ -29,7 +30,7 @@ CONFIG_PATH_REL = "configs/class/cifar_configs"  # Relative path for Hydra
 CONFIG_PATH_ABS = str(SCRIPT_DIR / "configs" / "class" / "cifar_configs")  # Absolute for file checks
 DATASET_ROOT = str(SCRIPT_DIR.parent / "datasets")
 CLASS_ORDER = str(SCRIPT_DIR / "class_orders" / "cifar100.yaml")
-NUM_RUNS = 3  # Run each config 3 times
+NUM_RUNS = 1  # Run each config once for quick testing
 OUTPUT_DIR = str(SCRIPT_DIR / "experiments" / "outputs")  # Output directory
 
 def config_file_exists(config_name: str) -> bool:
@@ -38,8 +39,9 @@ def config_file_exists(config_name: str) -> bool:
 
 
 def build_configs():
-    scenarios = ["2-2", "5-5"]
-    n_values = [4, 8, 16, 32]
+    # Short test: 1 scenario × 2 N values × 4 variants = 8 configs
+    scenarios = ["2-2"]  # Only smallest scenario for quick testing
+    n_values = [4, 8]  # Only N4 and N8 for quick testing
     variants = [
         {"suffix": "-GoE-ProtoDepth11", "moe_type": "MoE+GNN", "gnn_type": "ProtoDepth11 (No Noise)"},
         {"suffix": "-GoE-ProtoDepth11-Noise001", "moe_type": "MoE+GNN", "gnn_type": "ProtoDepth11 Noise001"},
@@ -180,22 +182,23 @@ def main():
     print(f"{Colors.CYAN}Building config list...{Colors.NC}")
     CONFIGS = build_configs()
     
-    # Calculate expected total: 4 N values × 2 scenarios × 2 MoE types × 2 noise options = 32
-    EXPECTED_TOTAL = 4 * 2 * 2 * 2
+    # Short test: 1 scenario × 2 N values × 4 variants = 8 configs
+    EXPECTED_TOTAL = 1 * 2 * 4
     found_count = len(CONFIGS)
     missing_count = EXPECTED_TOTAL - found_count
     
     print("=" * 50)
-    print("CIFAR-100 Test Suite (New Configs)")
+    print("CIFAR-100 GNN Short Test Suite (Quick Test)")
     print("=" * 50)
     print(f"Expected configs: {EXPECTED_TOTAL}")
     print(f"Found configs: {found_count}")
     if missing_count > 0:
         print(f"{Colors.YELLOW}Missing configs: {missing_count} (will be skipped){Colors.NC}")
-    print("  - 4 N values: N4 / N8 / N16 / N32")
-    print("  - 2 scenarios: 2*2 / 5*5")
-    print("  - 2 MoE types: MoE+GNN / HMoE-Hybrid+GNN")
-    print("  - 2 noise options: No Noise / Noise001")
+    print("  - 1 scenario: 2*2 (smallest, fastest)")
+    print("  - 2 N values: N4 / N8")
+    print("  - 4 GNN variants: All combinations (MoE/HMoE × No Noise/Noise001)")
+    print("")
+    print(f"{Colors.CYAN}This is a quick test to verify GNN fixes work correctly.{Colors.NC}")
     print("")
     print(f"Runs per config: {NUM_RUNS}")
     print(f"Total experiments: {len(CONFIGS) * NUM_RUNS}")
