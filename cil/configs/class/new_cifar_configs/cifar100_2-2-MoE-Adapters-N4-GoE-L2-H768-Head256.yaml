@@ -1,0 +1,52 @@
+# Configuration for CIFAR-100: 2-2 scenario, N=4, New GNN Structure
+# graph_num_layers=2, graph_hidden_dim=768, graph_head_layers=[256]
+
+defaults:
+  - ../cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N4-GoE-L2-H768-Head256"
+
+# Dataset configuration
+dataset_root: ""
+class_order: ""
+workdir: ""
+scenario: "class"
+prompt_template: "a bad photo of a {}."
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+dataset: "cifar100"
+batch_size: 64
+increment: ${initial_increment}
+initial_increment: 2
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+lr: 1e-3
+ls: 0.0
+
+# Model configuration
+model:
+  # MoE parameters
+  num_experts: 4           # Number of experts (N=4)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # Standard MoE (no HMoE)
+  hmoe_enabled: false
+  
+  # Graph mixer settings
+  graph_mixer_enabled: true       # Enable Graph-over-Experts mixer
+  graph_symmetrize: true          # Symmetrize adjacency matrix: A = (A + A^T) / 2
+  graph_add_self_loop: true       # Add self-loops before row normalization
+  graph_alpha_init: 0.0           # Initial value for graph fusion weight
+  graph_entropy_weight: 0.0       # Entropy regularization weight (0 = disabled)
+  
+  # New GNN structure parameters
+  graph_num_layers: 2          # GNN message passing depth
+  graph_hidden_dim: 768         # Hidden dimension for GNN
+  graph_head_layers: [256]  # Adjacency predictor depth
+  graph_layer_norm: true                  # Use LayerNorm
+  graph_residual: true                     # Use residual connections
+  graph_activation: "gelu"                # Activation function
+  graph_dropout: 0.0                      # Dropout rate

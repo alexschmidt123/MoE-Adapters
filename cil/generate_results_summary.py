@@ -7,6 +7,7 @@ Collects all metrics.json files from experiments in a run folder and creates a s
 import os
 import json
 import statistics
+import re
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Any
@@ -17,9 +18,11 @@ def extract_config_key(experiment_dir_name: str) -> str:
     Extract a config key from experiment directory name.
     Examples:
     - cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-Noise001-01182026-100001
-      -> N4-GoE-Noise001
+      -> N4-GoE-ProtoDepth11-Noise001
+    - cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth3-Noise01-01182026-100001
+      -> N4-GoE-ProtoDepth3-Noise01
     - cifar100_2-2-MoE-Adapters-N4-GoE-ProtoDepth11-01182026-100001
-      -> N4-GoE-NoNoise
+      -> N4-GoE-ProtoDepth11-NoNoise
     - cifar100_2-2-MoE-Adapters-N8-HMoE-Hybrid-01182026-100045
       -> N8-HMoE-Hybrid
     - cifar100_2-2-MoE-Adapters-N4-01182026-100123
@@ -45,8 +48,24 @@ def extract_config_key(experiment_dir_name: str) -> str:
     
     # Check for GoE and noise settings
     has_goe = 'GoE' in experiment_dir_name
-    has_noise = 'Noise001' in experiment_dir_name
-    has_protodepth = 'ProtoDepth11' in experiment_dir_name or 'ProtoDepth' in experiment_dir_name
+    
+    # Extract ProtoDepth value (e.g., ProtoDepth3, ProtoDepth5, ProtoDepth7, ProtoDepth9, ProtoDepth11)
+    proto_depth = None
+    for part in parts:
+        if part.startswith('ProtoDepth'):
+            # Extract number after "ProtoDepth"
+            try:
+                proto_depth = part.replace('ProtoDepth', '')
+                break
+            except:
+                pass
+    
+    # Check for noise settings (both Noise001 and Noise01)
+    noise_level = None
+    if 'Noise001' in experiment_dir_name:
+        noise_level = 'Noise001'
+    elif 'Noise01' in experiment_dir_name:
+        noise_level = 'Noise01'
     
     # Build key
     key_parts = [n_val]
@@ -54,21 +73,25 @@ def extract_config_key(experiment_dir_name: str) -> str:
     if has_hmoe:
         key_parts.append("HMoE-Hybrid")
         if has_goe:
-            if has_noise:
-                key_parts.append("GoE-Noise001")
-            elif has_protodepth:
-                key_parts.append("GoE-NoNoise")
+            if proto_depth:
+                key_parts.append(f"GoE-ProtoDepth{proto_depth}")
             else:
                 key_parts.append("GoE")
+            if noise_level:
+                key_parts.append(noise_level)
+            elif proto_depth:
+                key_parts.append("NoNoise")
     else:
         # Not HMoE
         if has_goe:
-            if has_noise:
-                key_parts.append("GoE-Noise001")
-            elif has_protodepth:
-                key_parts.append("GoE-NoNoise")
+            if proto_depth:
+                key_parts.append(f"GoE-ProtoDepth{proto_depth}")
             else:
                 key_parts.append("GoE")
+            if noise_level:
+                key_parts.append(noise_level)
+            elif proto_depth:
+                key_parts.append("NoNoise")
         else:
             # No GoE, no HMoE = Baseline
             key_parts.append("Baseline")
