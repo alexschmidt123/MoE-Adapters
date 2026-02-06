@@ -12,7 +12,9 @@ from torch.distributions.normal import Normal
 from collections import Counter
 
 global_taskid = 0
-global_is_train=True
+global_is_train = True
+# Number of classes in current task (for uneven splits: allocate more experts to heavier tasks)
+global_num_classes_current_task = None
 
 
 def generate_geometric_capacities(num_experts: int, base_capacity: int = 16, ratio: float = 2.0) -> List[int]:
@@ -111,13 +113,17 @@ class SparseDispatcher(object):
 
         self._gates = gates
         self._num_experts = num_experts
+        batch_size, num_gate_cols = gates.shape[0], gates.shape[1]
 
         sorted_experts, index_sorted_experts = torch.nonzero(gates).sort(0)
 
         # drop indices
         _, self._expert_index = sorted_experts.split(1, dim=1)
+        # clamp expert index to valid range (avoid CUDA scatter/gather OOB)
+        self._expert_index = self._expert_index.clamp(0, max(0, num_gate_cols - 1))
         # get according batch index for each expert
         self._batch_index = torch.nonzero(gates)[index_sorted_experts[:, 1], 0]
+        self._batch_index = self._batch_index.clamp(0, max(0, batch_size - 1))
         # calculate num samples that each expert gets
         self._part_sizes = (gates > 0).sum(0).tolist()
         # expand gates to match with self._batch_index
@@ -348,7 +354,8 @@ class ResidualAttentionBlock(nn.Module):
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
         self.is_train = global_is_train
-        self.step = 1
+        # Number of tasks (routers): from config for uneven/multi-task, else 1
+        self.step = int(getattr(getattr(cfg, "model", None), "num_tasks", 1)) if cfg is not None else 1
         
         # Read MoE config (backward compatible with defaults)
         if cfg is not None and hasattr(cfg, 'model'):
@@ -427,6 +434,9 @@ class ResidualAttentionBlock(nn.Module):
                 self.hmoe_balanced_activation_weight = 0.0
                 self.hmoe_gate_entropy_weight = 0.0
                 self.hmoe_load_balance_weight = 0.0
+            # Task-adaptive top_k: heavier task (more classes) -> use more experts (for uneven splits)
+            self.task_adaptive_top_k_step = int(getattr(cfg.model, 'task_adaptive_top_k_step', 5))  # +1 expert per this many extra classes
+            self.task_adaptive_top_k_base = int(getattr(cfg.model, 'task_adaptive_top_k_base', 10))  # baseline num_classes for scaling
         else:
             self.experts_num = 2
             self.top_k = 2
@@ -435,8 +445,8 @@ class ResidualAttentionBlock(nn.Module):
             self.expert_capacities = None
             self.hmoe_balanced_activation_weight = 0.0
             self.hmoe_gate_entropy_weight = 0.0
-            self.hmoe_load_balance_weight = 0.0
-            
+            self.task_adaptive_top_k_step = 5
+            self.task_adaptive_top_k_base = 10
         # Default bottleneck size (used for homogeneous experts or as fallback)
         self.ffn_num = 64  # Bottleneck size fixed at 64 for homogeneous case
         self.softmax = nn.Softmax(1)
@@ -636,7 +646,7 @@ class ResidualAttentionBlock(nn.Module):
         """
         return (gates > 0).sum(0)
 
-    def _prob_in_top_k(self, clean_values, noisy_values, noise_stddev, noisy_top_values):
+    def _prob_in_top_k(self, clean_values, noisy_values, noise_stddev, noisy_top_values, k_used=None):
         """Helper function to NoisyTopKGating.
         Computes the probability that value is in top k, given different random noise.
         This gives us a way of backpropagating from a loss that balances the number
@@ -649,19 +659,26 @@ class ResidualAttentionBlock(nn.Module):
           normally distributed noise with standard deviation noise_stddev.
         noise_stddev: a `Tensor` of shape [batch, n], or None
         noisy_top_values: a `Tensor` of shape [batch, m].
-           "values" Output of tf.top_k(noisy_top_values, m).  m >= k+1
+           "values" Output of tf.top_k(noisy_top_values, m).  m = min(k+1, n).
+        k_used: effective k used for this call (for task-adaptive top_k). If None, use self.top_k.
         Returns:
         a `Tensor` of shape [batch, n].
         """
-        # print('1231',clean_values)  # 全nan
         batch = clean_values.size(0)
         m = noisy_top_values.size(1)
         top_values_flat = noisy_top_values.flatten()
-
-        threshold_positions_if_in = torch.arange(batch, device=clean_values.device) * m + self.top_k
+        k_ref = (k_used if k_used is not None else self.top_k)
+        threshold_idx = min(k_ref, m - 1) if m > 0 else 0
+        # Guard against empty top_values to avoid gather index OOB
+        if batch == 0 or m == 0 or top_values_flat.numel() == 0:
+            return torch.zeros_like(clean_values, device=clean_values.device, dtype=clean_values.dtype)
+        threshold_positions_if_in = torch.arange(batch, device=clean_values.device, dtype=torch.long) * m + threshold_idx
+        threshold_positions_if_in = threshold_positions_if_in.clamp(0, top_values_flat.numel() - 1)
         threshold_if_in = torch.unsqueeze(torch.gather(top_values_flat, 0, threshold_positions_if_in), 1)
         is_in = torch.gt(noisy_values, threshold_if_in)
-        threshold_positions_if_out = threshold_positions_if_in - 1
+        threshold_idx_out = max(0, threshold_idx - 1)
+        threshold_positions_if_out = torch.arange(batch, device=clean_values.device, dtype=torch.long) * m + threshold_idx_out
+        threshold_positions_if_out = threshold_positions_if_out.clamp(0, top_values_flat.numel() - 1)
         threshold_if_out = torch.unsqueeze(torch.gather(top_values_flat, 0, threshold_positions_if_out), 1)
         # is each value currently in the top k.
         normal = Normal(self.mean, self.std)
@@ -672,18 +689,15 @@ class ResidualAttentionBlock(nn.Module):
         prob = torch.where(is_in, prob_if_in, prob_if_out)
         return prob
 
-    def noisy_top_k_gating(self, x, train, w_gate, w_noise, noise_epsilon=1e-2):
+    def noisy_top_k_gating(self, x, train, w_gate, w_noise, noise_epsilon=1e-2, top_k_override=None):
         """Noisy top-k gating.
           See paper: https://arxiv.org/abs/1701.06538.
-          Args:
-            x: input Tensor with shape [batch_size, input_size]
-            train: a boolean - we only add noise at training time.
-            noise_epsilon: a float
+          top_k_override: if set (e.g. from num_classes_current_task), use this many experts for this task (heavier task -> more experts).
           Returns:
-            gates: a Tensor with shape [batch_size, num_experts] (sparse, top-k only)
-            load: a Tensor with shape [num_experts]
-            full_gates: a Tensor with shape [batch_size, num_experts] (dense, all experts)
+            gates, load, full_gates
         """
+        k = top_k_override if top_k_override is not None else self.top_k
+        k = min(max(1, k), self.experts_num)
 
         clean_logits = x @ w_gate.to(x)
         if self.noisy_gating and train:
@@ -698,14 +712,18 @@ class ResidualAttentionBlock(nn.Module):
         full_gates = self.softmax(logits)  # [B, N] - dense, all experts
         
         # calculate topk + 1 that will be needed for the noisy gates
-        top_logits, top_indices = logits.topk(min(self.top_k + 1, self.experts_num), dim=1)
-        top_k_logits = top_logits[:, :self.top_k]
-        top_k_indices = top_indices[:, :self.top_k]
+        num_cols = logits.size(1)
+        top_logits, top_indices = logits.topk(min(k + 1, num_cols), dim=1)
+        top_k_logits = top_logits[:, :k]
+        # Clamp indices to valid range for scatter (use num_cols from tensor to avoid OOB)
+        top_k_indices = top_indices[:, :k].long().clamp(0, max(0, num_cols - 1))
         top_k_gates = self.softmax(top_k_logits)
         zeros = torch.zeros_like(logits)
+        # Ensure indices are on same device and contiguous for scatter (avoids CUDA OOB)
+        top_k_indices = top_k_indices.to(device=zeros.device).contiguous()
         gates = zeros.scatter(1, top_k_indices, top_k_gates)  # sparse, top-k only
-        if self.noisy_gating and self.top_k < self.experts_num and train:  # 目前未用上
-            load = (self._prob_in_top_k(clean_logits, noisy_logits, noise_stddev, top_logits)).sum(0)
+        if self.noisy_gating and k < self.experts_num and train:
+            load = (self._prob_in_top_k(clean_logits, noisy_logits, noise_stddev, top_logits, k_used=k)).sum(0)
         else:
             load = self._gates_to_load(gates)
         return gates, load, full_gates
@@ -715,7 +733,15 @@ class ResidualAttentionBlock(nn.Module):
         if global_taskid is not None:
             # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
             x_re = x.permute(1, 0, 2)[:, 0, :]  # Use CLS token: [B, D]
-            
+            # Baseline MoE: always fixed top_k (original behavior, unchanged).
+            # MoE-GNN only: use task-adaptive top_k (more experts for heavier tasks).
+            effective_top_k = self.top_k
+            if (self.graph_enabled and self.graph_mixer is not None and getattr(self, "use_proper_gnn", False)
+                    and global_num_classes_current_task is not None):
+                effective_top_k = min(
+                    self.experts_num,
+                    max(1, self.top_k + (global_num_classes_current_task - self.task_adaptive_top_k_base) // self.task_adaptive_top_k_step)
+                )
             # PROPER STRUCTURE: Input → GNN → Router → Experts → Output
             if self.graph_enabled and self.graph_mixer is not None and hasattr(self, 'use_proper_gnn') and self.use_proper_gnn:
                 # Step 1: GNN processes input first
@@ -726,7 +752,8 @@ class ResidualAttentionBlock(nn.Module):
                     x_gnn,  # Use GNN output instead of original input
                     self.is_train, 
                     self.router_list[global_taskid],
-                    self.w_noise_list[global_taskid]
+                    self.w_noise_list[global_taskid],
+                    top_k_override=effective_top_k
                 )
                 
                 # Step 3: Experts process GNN output (not original input)
@@ -755,8 +782,11 @@ class ResidualAttentionBlock(nn.Module):
             else:
                 # OLD STRUCTURE: Router → Experts (no GNN, or using old GNN implementation)
                 # Get gates from original input
-                gates, load, full_gates = self.noisy_top_k_gating(x_re, self.is_train, self.router_list[global_taskid],
-                                                      self.w_noise_list[global_taskid])
+                gates, load, full_gates = self.noisy_top_k_gating(
+                    x_re, self.is_train, self.router_list[global_taskid],
+                    self.w_noise_list[global_taskid],
+                    top_k_override=effective_top_k
+                )
                 
                 # Use original input for experts
                 dispatcher = SparseDispatcher(self.experts_num, gates)
@@ -1011,10 +1041,11 @@ class CLIP(nn.Module):
 
         return x
 
-    def forward(self, image, text, taskid, is_train):
-        global global_taskid, global_is_train
+    def forward(self, image, text, taskid, is_train, num_classes_current_task=None):
+        global global_taskid, global_is_train, global_num_classes_current_task
         global_taskid = taskid
         global_is_train = is_train
+        global_num_classes_current_task = num_classes_current_task
         if image is None:
             return self.encode_text(text)
         elif text is None:

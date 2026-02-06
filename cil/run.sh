@@ -1,13 +1,14 @@
 #!/bin/bash
 # General script to run any experiment with its config file
-# Usage: bash run.sh configs/class/xxxx.yaml
+# Usage: bash run.sh configs/class/xxxx.yaml [epochs]
 # Example: bash run.sh configs/class/cifar100_2-2-MoE-Adapters-N4-GoE.yaml
+# Example: bash run.sh configs/class/food101_11-10-MoE-Adapters-N4-GoE.yaml
 
 # Check if config file is provided
 if [ -z "$1" ]; then
     echo "Error: No config file provided"
     echo "Usage: bash run.sh <config_file_path>"
-    echo "Example: bash run.sh configs/class/cifar100_2-2-MoE-Adapters-N4-GoE.yaml"
+    echo "Example: bash run.sh configs/class/food101_11-10-MoE-Adapters-N4-GoE.yaml"
     exit 1
 fi
 
@@ -19,16 +20,29 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Extract config name from path (e.g., configs/class/cifar100_2-2-MoE-Adapters.yaml -> cifar100_2-2-MoE-Adapters)
-CONFIG_NAME=$(basename "$CONFIG_FILE" .yaml)
+# Extract config path and name so that subfolder configs (e.g. configs/class/uneven_cifar100/xxx.yaml) work
 CONFIG_DIR=$(dirname "$CONFIG_FILE")
-
-# Extract config path (e.g., configs/class)
-CONFIG_PATH=$(echo "$CONFIG_DIR" | sed 's|^\./||')
+CONFIG_BASE=$(basename "$CONFIG_FILE" .yaml)
+# If config is inside configs/class/SUBFOLDER/, use configs/class as path and SUBFOLDER/basename as name
+if [[ "$CONFIG_DIR" == *"/"*"/"* ]]; then
+    CLASS_DIR="configs/class"
+    if [[ "$CONFIG_DIR" == "$CLASS_DIR" ]]; then
+        CONFIG_PATH=$(echo "$CONFIG_DIR" | sed 's|^\./||')
+        CONFIG_NAME="$CONFIG_BASE"
+    else
+        CONFIG_PATH="$CLASS_DIR"
+        CONFIG_NAME="${CONFIG_DIR#$CLASS_DIR/}/$CONFIG_BASE"
+    fi
+else
+    CONFIG_PATH=$(echo "$CONFIG_DIR" | sed 's|^\./||')
+    CONFIG_NAME="$CONFIG_BASE"
+fi
 
 # Auto-detect dataset from config name
 if [[ "$CONFIG_NAME" == *"cifar100"* ]]; then
     DATASET="cifar100"
+elif [[ "$CONFIG_NAME" == *"food101"* ]]; then
+    DATASET="food101"
 elif [[ "$CONFIG_NAME" == *"tinyimagenet"* ]]; then
     DATASET="tinyimagenet"
 elif [[ "$CONFIG_NAME" == *"imagenet"* ]]; then

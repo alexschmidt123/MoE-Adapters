@@ -1,4 +1,4 @@
-from omegaconf import DictConfig
+from omegaconf import DictConfig, open_dict
 from tqdm import tqdm
 import torch.nn.functional as F
 
@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from .utils import get_class_ids_per_task, get_class_names, batch, merge_we_router, wise_we, moving_avg, l2_loss, \
+from .utils import get_class_ids_per_task, get_class_names, get_num_tasks, batch, merge_we_router, wise_we, moving_avg, l2_loss, \
     virtual_vocab, distillation
 import copy
 
@@ -26,6 +26,14 @@ class ClassIncremental(nn.Module):
         self.prompt_template = cfg.prompt_template
         self.device = device
         self.classes_names = None
+        # So that CLIP MoE allocates one router per task (fixes uneven / multi-task)
+        num_tasks = get_num_tasks(cfg)
+        with open_dict(cfg):
+            if not hasattr(cfg, "model") or cfg.model is None:
+                from omegaconf import OmegaConf
+                cfg.model = OmegaConf.create({})
+        with open_dict(cfg.model):
+            cfg.model.num_tasks = num_tasks
         self.model, self.transforms, _ = clip.load(cfg.model_name, device=device, jit=jit, cfg=cfg)
         self.ref_model = None
         self.class_ids_per_task = list(get_class_ids_per_task(cfg))
@@ -142,7 +150,11 @@ class ClassIncremental(nn.Module):
 
             inputs, targets = inputs.cuda(), targets.cuda()
 
-            logits_per_image, _ = self.model(inputs, texts, 0, is_train=True)  # 分开
+            num_classes_current_task = len(self.class_ids_per_task[task_id])
+            logits_per_image, _ = self.model(
+                inputs, texts, task_id, is_train=True,
+                num_classes_current_task=num_classes_current_task
+            )
             # -- cross entropy loss --
             loss = F.cross_entropy(logits_per_image, targets, label_smoothing=cfg.ls)
             

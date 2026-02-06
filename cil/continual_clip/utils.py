@@ -1,4 +1,5 @@
 
+import math
 import os
 import json
 import yaml
@@ -18,13 +19,36 @@ __all__ = ["available_models", "load", "tokenize"]
 _tokenizer = _Tokenizer()
 
 def get_class_order(file_name: str) -> list:
-    r"""TO BE DOCUMENTED"""
+    """Load class_order list from YAML file."""
     with open(file_name, "r+") as f:
         data = yaml.safe_load(f)
         return data["class_order"]
 
 
+def get_num_tasks(args):
+    """Number of incremental tasks from config (used for router_list size in MoE)."""
+    if getattr(args, "task_sizes", None) is not None:
+        return len(list(args.task_sizes))
+    n = len(args.class_order)
+    initial = getattr(args, "initial_increment", 10)
+    inc = getattr(args, "increment", 10)
+    return 1 + math.ceil((n - initial) / inc) if n > initial else 1
+
+
 def get_class_ids_per_task(args):
+    # Uneven split: task_sizes = [n1, n2, ...], sum must equal len(class_order)
+    if getattr(args, "task_sizes", None) is not None:
+        task_sizes = list(args.task_sizes)
+        if sum(task_sizes) != len(args.class_order):
+            raise ValueError(
+                f"task_sizes must sum to len(class_order): sum={sum(task_sizes)} != {len(args.class_order)}"
+            )
+        start = 0
+        for n in task_sizes:
+            yield args.class_order[start : start + n]
+            start += n
+        return
+    # Even split: initial_increment then increment per task
     yield args.class_order[:args.initial_increment]
     for i in range(args.initial_increment, len(args.class_order), args.increment):
         yield args.class_order[i:i + args.increment]

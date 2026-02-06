@@ -1,6 +1,8 @@
 
 
+import json
 import os
+import numpy as np
 import torch.nn as nn
 
 from continuum import ClassIncremental, InstanceIncremental
@@ -8,6 +10,42 @@ from continuum.datasets import (
     CIFAR100, ImageNet100, TinyImageNet200, ImageFolderDataset, Core50
 )
 from .utils import get_dataset_class_names
+from .uneven_scenario import UnevenClassIncremental
+
+
+class Food101Raw(ImageFolderDataset):
+    """Food-101 in raw layout: data_path/images/ and data_path/meta/train.json, test.json.
+    Uses meta/classes.txt for class order (index = line number).
+    """
+
+    def __init__(self, data_path: str, train: bool = True, download: bool = False):
+        self._data_path = data_path
+        self.train = train
+        # Continuum expects data_path; we set it to images/ so base can find classes, but we override get_data
+        images_path = os.path.join(data_path, "images")
+        super().__init__(data_path=images_path, train=train, download=download)
+
+    def get_data(self):
+        meta_dir = os.path.join(self._data_path, "meta")
+        split_file = os.path.join(meta_dir, "train.json" if self.train else "test.json")
+        classes_file = os.path.join(meta_dir, "classes.txt")
+        with open(classes_file, "r") as f:
+            class_names = [line.strip() for line in f if line.strip()]
+        class_to_idx = {c: i for i, c in enumerate(class_names)}
+        with open(split_file, "r") as f:
+            split = json.load(f)
+        images_path = os.path.join(self._data_path, "images")
+        x_list, y_list = [], []
+        for class_name, rel_paths in split.items():
+            idx = class_to_idx[class_name]
+            for rel in rel_paths:
+                full = os.path.join(images_path, rel + ".jpg")
+                x_list.append(full)
+                y_list.append(idx)
+        x = np.array(x_list, dtype=object)
+        y = np.array(y_list, dtype=np.int64)
+        t = np.full(len(y), -1, dtype=np.int64)
+        return x, y, t
 
 
 class ImageNet1000(ImageFolderDataset):
@@ -23,6 +61,23 @@ class ImageNet1000(ImageFolderDataset):
             train: bool = True,
             download: bool = False,
     ):
+        super().__init__(data_path=data_path, train=train, download=download)
+
+    def get_data(self):
+        if self.train:
+            self.data_path = os.path.join(self.data_path, "train")
+        else:
+            self.data_path = os.path.join(self.data_path, "val")
+        return super().get_data()
+
+
+class CustomImageFolder(ImageFolderDataset):
+    """Generic ImageFolder-style dataset with train/val subfolders.
+    Expects: data_path/train/class_name/*.jpg and data_path/val/class_name/*.jpg
+    Use this when adding a new dataset (Option B) with folder-per-class layout.
+    """
+
+    def __init__(self, data_path: str, train: bool = True, download: bool = False):
         super().__init__(data_path=data_path, train=train, download=download)
 
     def get_data(self):
@@ -85,9 +140,17 @@ def get_dataset(cfg, is_train, transforms=None):
             "plug adapters", "mobile phones", "scissors", "light bulbs", "cans", 
             "glasses", "balls", "markers", "cups", "remote controls"
         ]
-    
+
+    elif cfg.dataset == "food101":
+        # Raw Food-101 layout: dataset_root/food-101 with images/ and meta/train.json, test.json, classes.txt
+        data_path = os.path.join(cfg.dataset_root, "food-101")
+        dataset = Food101Raw(data_path=data_path, train=is_train, download=False)
+        classes_file = os.path.join(data_path, "meta", "classes.txt")
+        with open(classes_file, "r") as f:
+            classes_names = [line.strip().replace("_", " ") for line in f if line.strip()]
+
     else:
-        ValueError(f"'{cfg.dataset}' is a invalid dataset.")
+        raise ValueError(f"'{cfg.dataset}' is an invalid dataset.")
 
     return dataset, classes_names
 
@@ -97,13 +160,21 @@ def build_cl_scenarios(cfg, is_train, transforms) -> nn.Module:
     dataset, classes_names = get_dataset(cfg, is_train)
 
     if cfg.scenario == "class":
-        scenario = ClassIncremental(
-            dataset,
-            initial_increment=cfg.initial_increment,
-            increment=cfg.increment,
-            transformations=transforms.transforms, # Convert Compose into list
-            class_order=cfg.class_order,
-        )
+        if getattr(cfg, "task_sizes", None) is not None:
+            scenario = UnevenClassIncremental(
+                dataset,
+                class_order=cfg.class_order,
+                task_sizes=cfg.task_sizes,
+                transformations=transforms.transforms,
+            )
+        else:
+            scenario = ClassIncremental(
+                dataset,
+                initial_increment=cfg.initial_increment,
+                increment=cfg.increment,
+                transformations=transforms.transforms,  # Convert Compose into list
+                class_order=cfg.class_order,
+            )
 
     elif cfg.scenario == "domain":
         scenario = InstanceIncremental(

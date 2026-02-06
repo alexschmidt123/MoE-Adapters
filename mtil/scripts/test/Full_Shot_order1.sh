@@ -11,8 +11,10 @@ if command -v conda &> /dev/null; then
 fi
 
 # Configuration: Set your data location here
-# Default: use relative path to datasets directory (one level up from mtil)
-DATA_LOCATION="${DATA_LOCATION:-$(cd "$(dirname "$0")/../../.." && pwd)/datasets}"
+# Default: ../datasets when run from mtil/, or ../../datasets when run from mtil/scripts/test/
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MTIL_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DATA_LOCATION="${DATA_LOCATION:-$MTIL_ROOT/datasets}"
 
 # GPU configuration: Set to available GPU IDs (comma-separated)
 # Default: GPU 0 (change if you have multiple GPUs)
