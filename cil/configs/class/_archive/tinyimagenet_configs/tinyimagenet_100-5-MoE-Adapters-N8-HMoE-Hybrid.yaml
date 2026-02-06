@@ -1,0 +1,45 @@
+# Configuration for TinyImageNet: 100-5 scenario (20 step, 100 base classes), N=8, HMoE-Hybrid, NoGNN
+# Generated unified config for comprehensive experiments
+
+defaults:
+  - ../reference/tinyimagenet_100-5
+  - _self_
+
+# Override method name to create distinct output directory
+method: "MoE-Adapters-N8-HMoE-Hybrid"
+
+# Dataset configuration
+dataset_root: ""
+class_order: ""
+workdir: ""
+scenario: "class"
+prompt_template: "a bad photo of a {}."
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+dataset: "tinyimagenet"
+batch_size: 64
+increment: 5
+initial_increment: 100  # 100 base classes from 200 total
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+lr: 1e-3
+ls: 0.0
+
+# Model configuration
+model:
+  # MoE parameters
+  num_experts: 8           # Number of experts (N=8)
+  top_k: 2                 # Keep k=2 (standard sparse MoE)
+  
+  # HMoE: Heterogeneous Mixture of Experts settings
+  hmoe_enabled: true       # Enable heterogeneous experts with different capacities
+  # Hybrid strategy: combines homogeneous and heterogeneous elements
+  hmoe_strategy: "hybrid"  # Options: "geometric", "arithmetic", "hybrid", or "manual"
+  hmoe_base_capacity: 32     # Base capacity for smaller experts (hybrid strategy)
+  hmoe_balanced_activation_weight: 0.01
+  hmoe_gate_entropy_weight: 0.0
+  hmoe_load_balance_weight: 0.0
+  
+  # Graph mixer DISABLED
+  graph_mixer_enabled: false

@@ -1,0 +1,17 @@
+# Food101 CIL example: 101 classes, 11 initial + 10 per task (11 tasks total)
+# Data: raw Food-101 layout under dataset_root/food-101/
+#   (images/ + meta/train.json, meta/test.json, meta/classes.txt).
+# Default dataset_root: ../datasets (so food-101 at MoE-Adapters/datasets/food-101).
+#
+# Example (from cil/):
+#   python main.py --config-path configs/class --config-name food101_11-10-MoE-Adapters-N4-GoE
+
+defaults:
+  - cifar100_2-2-MoE-Adapters-N2
+  - _self_
+
+dataset: "food101"
+class_order: "class_orders/food101.yaml"
+dataset_root: "../datasets"
+initial_increment: 11   # 11 + 9*10 = 101 classes
+increment: 10

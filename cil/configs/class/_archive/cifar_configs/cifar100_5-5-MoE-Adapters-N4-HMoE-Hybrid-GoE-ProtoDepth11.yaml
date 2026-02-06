@@ -1,0 +1,45 @@
+# Configuration for CIFAR-100: 5-5 scenario, N=4, HMoE-Hybrid, GoE-ProtoDepth11 (No Noise)
+
+defaults:
+  - ../reference/cifar100_5-5-MoE-Adapters
+  - _self_
+
+method: "MoE-Adapters-N4-HMoE-Hybrid-GoE-ProtoDepth11"
+
+dataset_root: ""
+class_order: ""
+workdir: ""
+scenario: "class"
+prompt_template: "a bad photo of a {}."
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+dataset: "cifar100"
+batch_size: 128
+increment: ${initial_increment}
+initial_increment: 5
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+lr: 1e-3
+ls: 0.0
+
+model:
+  num_experts: 4
+  top_k: 2
+  hmoe_enabled: true
+  hmoe_strategy: "hybrid"
+  hmoe_base_capacity: 32
+  hmoe_balanced_activation_weight: 0.01
+  hmoe_gate_entropy_weight: 0.0
+  hmoe_load_balance_weight: 0.0
+  graph_mixer_enabled: true
+  graph_symmetrize: true
+  graph_add_self_loop: true
+  graph_alpha_init: 0.0
+  graph_entropy_weight: 0.0
+  graph_use_noisy_adjacency: false
+  graph_noise_epsilon: 0.0
+  graph_proto_layers: [512, 256, 128, 64, 32, 16, 8, 4, 2, 1]
+  graph_proto_activation: "gelu"
+  graph_proto_use_norm: true
+  graph_proto_dropout: 0.1
