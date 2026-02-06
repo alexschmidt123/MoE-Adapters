@@ -2,6 +2,7 @@
 """
 Run uneven CIFAR-100 configs, each 3 times.
 Same logic as run_test.sh, Windows-friendly (pathlib, subprocess).
+Uses POSIX-style paths for Hydra to avoid Windows backslash issues.
 """
 import os
 import subprocess
@@ -17,9 +18,15 @@ CONFIG_NAMES = [
 ]
 NUM_RUNS = 3
 
-# Resolve paths relative to script directory (so it works from any cwd on Windows/Linux)
+# Resolve paths relative to script directory (works from any cwd on Windows/Linux)
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONFIG_PATH_ABS = SCRIPT_DIR / CONFIG_PATH
+# Use forward slashes so Path joins correctly on Windows (Path treats both / and \)
+CONFIG_PATH_ABS = SCRIPT_DIR / CONFIG_PATH.replace("\\", "/")
+
+
+def _path_for_hydra(p: Path) -> str:
+    """Path string safe for Hydra on Windows: use forward slashes."""
+    return p.as_posix()
 
 
 def main():
@@ -46,23 +53,27 @@ def main():
         print(f"--- Config: {config_name} ---")
         for i in range(1, NUM_RUNS + 1):
             exp_ts = datetime.now().strftime("%m%d%Y-%H%M%S")
-            # Path() accepts forward slashes on all platforms
+            # Build path with forward slashes (Path handles them on Windows)
             exp_dir = SCRIPT_DIR / "experiments" / run_start / f"{config_name}-run{i}-{exp_ts}"
-            exp_dir_str = str(exp_dir)
+            # Use POSIX-style path for Hydra to avoid Windows backslash/escape issues
+            exp_dir_str = _path_for_hydra(exp_dir)
+            config_path_str = _path_for_hydra(CONFIG_PATH_ABS)
 
             print(f"Run {i}/{NUM_RUNS}: {config_name}")
 
+            main_py = SCRIPT_DIR / "main.py"
             cmd = [
                 sys.executable,
-                "main.py",
-                "--config-path", str(CONFIG_PATH_ABS),
+                os.fspath(main_py),
+                "--config-path", config_path_str,
                 "--config-name", f"{config_name}.yaml",
                 f"hydra.run.dir={exp_dir_str}",
             ]
             try:
+                # cwd: use native path for subprocess on this platform
                 ret = subprocess.run(
                     cmd,
-                    cwd=str(SCRIPT_DIR),
+                    cwd=os.fspath(SCRIPT_DIR),
                     env=env,
                 )
                 if ret.returncode != 0:
