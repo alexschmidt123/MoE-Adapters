@@ -1,6 +1,6 @@
-# CIFAR-100 uneven 10 tasks — MoE only (no GNN), N=4.
+# CIFAR-100 uneven 10 tasks — MoE only (no GNN), N=8.
 # task_sizes: [5, 15, 8, 12, 10, 8, 15, 10, 10, 7] (sum=100).
-# Run: bash run.sh configs/class/uneven_cifar100/cifar100_uneven10-MoE-Adapters-N4.yaml
+# Run: bash run.sh configs/class/uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8.yaml
 # Use smaller batch_size to avoid OOM on 24GB GPU (ViT-B/16 + MoE is memory-heavy).
 
 defaults:
@@ -12,9 +12,9 @@ task_sizes: [5, 15, 8, 12, 10, 8, 15, 10, 10, 7]
 batch_size: 32  # Windows PC (47GB GPU); use 24 or 16 if OOM
 epochs: 15     # Need enough epochs for new tasks to learn
 
-method: "MoE-Adapters-N4"
+method: "MoE-Adapters-N8"
 
 model:
-  num_experts: 4
+  num_experts: 8
   top_k: 2
   graph_mixer_enabled: false   # MoE only, no GNN

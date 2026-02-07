@@ -1,11 +1,11 @@
 #!/bin/bash
-# Run uneven CIFAR-100 configs, each 3 times.
-# Configs: cifar100_uneven10-MoE-Adapters-N4.yaml, cifar100_uneven10-MoE-Adapters-N4-GoE.yaml
+# Run uneven CIFAR-100 configs, each 3 times. N8 only.
+# Configs: N8, N8-GoE (2 configs × 3 runs = 6 runs).
 
 CONFIG_PATH="configs/class"
 CONFIG_NAMES=(
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N4"
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N4-GoE"
+    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8"
+    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8-GoE"
 )
 NUM_RUNS=3
 
@@ -17,7 +17,7 @@ NC='\033[0m'
 
 RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
 echo "=========================================="
-echo "Uneven CIFAR-100 test: 2 configs × $NUM_RUNS runs"
+echo "Uneven CIFAR-100 test: ${#CONFIG_NAMES[@]} configs × $NUM_RUNS runs"
 echo "=========================================="
 echo "Configs: ${CONFIG_NAMES[*]}"
 echo "Runs per config: $NUM_RUNS"
@@ -34,18 +34,32 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
     for i in $(seq 1 $NUM_RUNS); do
         EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
         EXP_DIR="experiments/${RUN_START_TIMESTAMP}/${CONFIG_NAME}-run${i}-${EXP_TIMESTAMP}"
-        echo -e "${BLUE}Run $i/$NUM_RUNS: $CONFIG_NAME${NC}"
+        echo -e "${BLUE}Run $i/$NUM_RUNS: $CONFIG_NAME (batch_size=32)${NC}"
 
-        # All results go to experiments/ (override so no "output"/"outputs" folder is created)
+        # First try with config default (32); on OOM retry with batch_size=12
+        OOM_ERR=$(mktemp 2>/dev/null || echo /tmp/run_test_oom.$$)
         CUDA_VISIBLE_DEVICES=0 python main.py \
             --config-path "$CONFIG_PATH" \
             --config-name "${CONFIG_NAME}.yaml" \
-            hydra.run.dir="$EXP_DIR" || {
+            hydra.run.dir="$EXP_DIR" 2> "$OOM_ERR"
+        CODE=$?
+        if [ $CODE -ne 0 ] && grep -qiE "out of memory|outofmemoryerror|cuda out of memory" "$OOM_ERR" 2>/dev/null; then
+            echo -e "${BLUE}OOM detected; retrying with batch_size=12 ...${NC}"
+            CUDA_VISIBLE_DEVICES=0 python main.py \
+                --config-path "$CONFIG_PATH" \
+                --config-name "${CONFIG_NAME}.yaml" \
+                hydra.run.dir="$EXP_DIR" \
+                batch_size=12 2> "$OOM_ERR"
+            CODE=$?
+        fi
+        rm -f "$OOM_ERR"
+
+        if [ $CODE -ne 0 ]; then
             FAILED=$((FAILED + 1))
             FAILED_LIST+=("$CONFIG_NAME run $i")
             echo -e "${RED}✗ Failed: $CONFIG_NAME run $i${NC}"
             continue
-        }
+        fi
         SUCCESSFUL=$((SUCCESSFUL + 1))
         echo -e "${GREEN}✓ Run $i/$NUM_RUNS completed: $CONFIG_NAME${NC}"
         echo ""

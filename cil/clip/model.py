@@ -434,6 +434,8 @@ class ResidualAttentionBlock(nn.Module):
                 self.hmoe_balanced_activation_weight = 0.0
                 self.hmoe_gate_entropy_weight = 0.0
                 self.hmoe_load_balance_weight = 0.0
+            # Load balance for standard MoE/GoE (when not HMoE); improves stability
+            self.moe_load_balance_weight = float(getattr(cfg.model, 'moe_load_balance_weight', 0.0))
             # Task-adaptive top_k: heavier task (more classes) -> use more experts (for uneven splits)
             self.task_adaptive_top_k_step = int(getattr(cfg.model, 'task_adaptive_top_k_step', 5))  # +1 expert per this many extra classes
             self.task_adaptive_top_k_base = int(getattr(cfg.model, 'task_adaptive_top_k_base', 10))  # baseline num_classes for scaling
@@ -445,6 +447,8 @@ class ResidualAttentionBlock(nn.Module):
             self.expert_capacities = None
             self.hmoe_balanced_activation_weight = 0.0
             self.hmoe_gate_entropy_weight = 0.0
+            self.hmoe_load_balance_weight = 0.0
+            self.moe_load_balance_weight = 0.0
             self.task_adaptive_top_k_step = 5
             self.task_adaptive_top_k_base = 10
         # Default bottleneck size (used for homogeneous experts or as fallback)
@@ -856,6 +860,13 @@ class ResidualAttentionBlock(nn.Module):
                         self.extra_losses = self.hmoe_load_balance_weight * load_balance_loss
                     else:
                         self.extra_losses = self.extra_losses + self.hmoe_load_balance_weight * load_balance_loss
+            # MoE/GoE load balance (when not HMoE): encourages uniform expert usage for stability
+            elif getattr(self, 'moe_load_balance_weight', 0) > 0 and self.is_train:
+                load_balance_loss = self.cv_squared(importance) + self.cv_squared(load)
+                if self.extra_losses is None:
+                    self.extra_losses = self.moe_load_balance_weight * load_balance_loss
+                else:
+                    self.extra_losses = self.extra_losses + self.moe_load_balance_weight * load_balance_loss
             
             x = x + self.mlp(self.ln_2(x)) + y_output.permute(1, 0, 2)
         else:

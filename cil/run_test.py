@@ -7,14 +7,15 @@ Uses POSIX-style paths for Hydra to avoid Windows backslash issues.
 import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-# Configs: same as run_test.sh
+# Configs: N8 only (2 configs × 3 runs)
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N4",
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N4-GoE",
+    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8",
+    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8-GoE",
 ]
 NUM_RUNS = 3
 
@@ -27,6 +28,14 @@ CONFIG_PATH_ABS = SCRIPT_DIR / CONFIG_PATH.replace("\\", "/")
 def _path_for_hydra(p: Path) -> str:
     """Path string safe for Hydra on Windows: use forward slashes."""
     return p.as_posix()
+
+
+def _is_oom(stderr: str) -> bool:
+    """True if stderr indicates CUDA/system out-of-memory."""
+    if not stderr:
+        return False
+    s = stderr.lower()
+    return "out of memory" in s or "outofmemoryerror" in s or "cuda out of memory" in s
 
 
 def main():
@@ -59,10 +68,10 @@ def main():
             exp_dir_str = _path_for_hydra(exp_dir)
             config_path_str = _path_for_hydra(CONFIG_PATH_ABS)
 
-            print(f"Run {i}/{NUM_RUNS}: {config_name}")
+            print(f"Run {i}/{NUM_RUNS}: {config_name} (batch_size=32)")
 
             main_py = SCRIPT_DIR / "main.py"
-            cmd = [
+            cmd_base = [
                 sys.executable,
                 os.fspath(main_py),
                 "--config-path", config_path_str,
@@ -70,25 +79,69 @@ def main():
                 f"hydra.run.dir={exp_dir_str}",
             ]
             try:
-                # cwd: use native path for subprocess on this platform
-                ret = subprocess.run(
-                    cmd,
-                    cwd=os.fspath(SCRIPT_DIR),
-                    env=env,
-                )
-                if ret.returncode != 0:
-                    failed += 1
-                    failed_list.append(f"{config_name} run {i}")
-                    print(f"Failed: {config_name} run {i}")
+                # First try: use config default (32). Don't capture stdout so output streams and run doesn't look stuck.
+                err_fd = tempfile.NamedTemporaryFile(mode="w", suffix=".err", delete=False)
+                err_path = err_fd.name
+                err_fd.close()
+                stderr_content = ""
+                try:
+                    with open(err_path, "w", encoding="utf-8", errors="replace") as err_file:
+                        ret = subprocess.run(
+                            cmd_base,
+                            cwd=os.fspath(SCRIPT_DIR),
+                            env=env,
+                            stdout=None,
+                            stderr=err_file,
+                        )
+                finally:
+                    if os.path.exists(err_path):
+                        with open(err_path, "r", encoding="utf-8", errors="replace") as f:
+                            stderr_content = f.read()
+                        os.remove(err_path)
+
+                if ret.returncode == 0:
+                    successful += 1
+                    print(f"Run {i}/{NUM_RUNS} completed: {config_name}")
+                    print()
                     continue
+                # Failed: retry with batch_size=12 if OOM
+                if _is_oom(stderr_content):
+                    print("OOM detected; retrying with batch_size=12 ...")
+                    cmd_retry = cmd_base + ["batch_size=12"]
+                    err_fd2 = tempfile.NamedTemporaryFile(mode="w", suffix=".err", delete=False)
+                    err_path2 = err_fd2.name
+                    err_fd2.close()
+                    try:
+                        with open(err_path2, "w", encoding="utf-8", errors="replace") as err_file2:
+                            ret2 = subprocess.run(
+                                cmd_retry,
+                                cwd=os.fspath(SCRIPT_DIR),
+                                env=env,
+                                stdout=None,
+                                stderr=err_file2,
+                            )
+                    finally:
+                        if os.path.exists(err_path2):
+                            os.remove(err_path2)
+                    if ret2.returncode == 0:
+                        successful += 1
+                        print(f"Run {i}/{NUM_RUNS} completed: {config_name} (batch_size=12)")
+                        print()
+                        continue
+                # Still failed or non-OOM failure
+                failed += 1
+                failed_list.append(f"{config_name} run {i}")
+                print(f"Failed: {config_name} run {i}")
+                if stderr_content.strip():
+                    print("Last 30 lines of stderr:")
+                    for line in stderr_content.strip().splitlines()[-30:]:
+                        print(line)
+                continue
             except Exception as e:
                 failed += 1
                 failed_list.append(f"{config_name} run {i}")
                 print(f"Failed: {config_name} run {i} ({e})")
                 continue
-            successful += 1
-            print(f"Run {i}/{NUM_RUNS} completed: {config_name}")
-            print()
         print()
 
     print("==========================================")

@@ -43,7 +43,32 @@ class ClassIncremental(nn.Module):
 
     def forward(self, image, taskid):
         with torch.no_grad():
-            logits_per_image, _ = self.model(image, self.text_tokens, 0, is_train=False)
+            # MoE/GoE use router_list[taskid] per task; eval batches mix tasks 0..T → must use correct router per sample.
+            # (Using router 0 for all caused bad acc for task 1, task 8, and every other task in the reported metrics.)
+            num_tasks = len(self.class_ids_per_task)
+            if isinstance(taskid, torch.Tensor) and taskid.dim() >= 1 and taskid.numel() > 1:
+                # Per-sample task ids [B]: split by task, run with correct taskid each, then reorder
+                taskid_flat = taskid.view(-1).to(image.device)
+                unique_tasks = taskid_flat.unique(sorted=True)
+                logits_list = []
+                indices_list = []
+                for t in unique_tasks:
+                    t_int = min(int(t.item()), num_tasks - 1)  # clamp to valid router index
+                    mask = (taskid_flat == t)
+                    indices_list.append(mask.nonzero(as_tuple=True)[0])
+                    img_t = image[mask]
+                    logits_t, _ = self.model(img_t, self.text_tokens, t_int, is_train=False)
+                    logits_list.append(logits_t)
+                # Reorder to original batch order (same order as taskid)
+                logits_per_image = torch.zeros(
+                    image.shape[0], logits_list[0].shape[1], device=image.device, dtype=logits_list[0].dtype
+                )
+                for inds, logits_t in zip(indices_list, logits_list):
+                    logits_per_image[inds] = logits_t
+            else:
+                tid = int(taskid.item()) if isinstance(taskid, torch.Tensor) else int(taskid)
+                tid = min(tid, num_tasks - 1)
+                logits_per_image, _ = self.model(image, self.text_tokens, tid, is_train=False)
             probs = logits_per_image.softmax(dim=-1)
         return probs
 
