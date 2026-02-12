@@ -72,7 +72,7 @@ bash run_all_cifar_test.sh
 
 ### Test Scripts
 
-- `run_test.py` / `run_test.sh`: Run 28 configs (1 baseline MoE + 27 GoE grid) under `configs/class/` as `02052026_baseline.yaml`, `02052026_GoE-L*-H*-Head*.yaml` (flat names; timestamp mmddyyyy), 3 runs each; then write `summary.csv` (last_acc, avg_acc per run and per-config averages). `run_test.py` is Windows-friendly (pathlib, forward slashes for Hydra).
+- `run_test.py` / `run_test.sh`: Run 28 configs (1 baseline MoE + 27 GoE grid) from `configs/class/02052026_uneven_cifar100/` (e.g. `baseline.yaml`, `GoE-L*-H*-Head*.yaml`); use `--config-path configs/class --config-name 02052026_uneven_cifar100/baseline` (etc.), 3 runs each; then write `summary.csv` (last_acc, avg_acc per run and per-config averages). `run_test.py` is Windows-friendly (pathlib, forward slashes for Hydra).
 - `run_all_cifar_test.py` / `run_all_cifar_test.sh`: Quick test (8 configs)
 - `run_all_cifar.py` / `run_all_cifar.sh`: Full CIFAR-100 suite
 - `run_all_imagenet.py` / `run_all_imagenet.sh`: ImageNet suite

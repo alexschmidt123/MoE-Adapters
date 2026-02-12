@@ -1,6 +1,12 @@
 Config name meaning (28 configs: 1 baseline + 27 GoE grid)
-Runnable configs: 02052026_*.yaml in configs/class/ (flat names).
-Key configs (self-contained, no _archive): 02052026_baseline.yaml, 02052026_GoE-L2-H768-HeadNone.yaml. Other 26 GoE configs extend the key GoE and override only graph_num_layers, graph_hidden_dim, graph_head_layers.
+All runnable configs live in this folder: 02052026_uneven_cifar100/*.yaml.
+Run with: --config-path configs/class --config-name 02052026_uneven_cifar100/baseline (etc).
+run_test.py and run_test.sh use these config names.
+
+Key configs (self-contained; no _archive or other defaults):
+  1. baseline.yaml           — All params in file. MoE N8 only, no GNN.
+  2. GoE-L2-H768-HeadNone.yaml — All params in file. MoE-GNN (GoE) with default L=2, H=768, Head=linear.
+The other 26 GoE configs extend only GoE-L2-H768-HeadNone and override model.graph_num_layers, graph_hidden_dim, graph_head_layers.
 
 baseline
   MoE N8 only, no GNN. Reference for all GoE runs.
@@ -11,5 +17,5 @@ GoE-L{1|2|3}-H{512|768|1024}-Head{None|512|512_256}
   Head= graph_head_layers: None (linear), [512], or [512, 256]   (default: None)
 
 Examples:
-  GoE-L2-H768-HeadNone       = all defaults (2 layers, 768, linear head)
-  GoE-L3-H512-Head512_256    = 3 layers, hidden 512, head [512, 256]
+  GoE-L2-H768-HeadNone       = key GoE config (2 layers, 768, linear head)
+  GoE-L3-H512-Head512_256    = extends key; 3 layers, hidden 512, head [512, 256]

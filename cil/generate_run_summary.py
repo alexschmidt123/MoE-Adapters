@@ -36,7 +36,7 @@ def main():
         metrics_path = exp_dir / "metrics.json"
         if not metrics_path.exists():
             continue
-        # Dir name: 02052026_baseline-run1-123456 → config_name, run_id (flat names)
+        # Dir name: 02052026_uneven_cifar100_baseline-run1-123456 → config_name, run_id
         name = exp_dir.name
         if "-run" not in name:
             continue

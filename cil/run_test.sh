@@ -1,38 +1,38 @@
 #!/bin/bash
 # Run 28 configs (1 baseline + 27 GoE grid), 3 runs each; then generate summary.csv.
-# Same configs as run_test.py. Configs: configs/class/02052026_*.yaml (flat names).
+# Same configs as run_test.py. Configs: configs/class/02052026_uneven_cifar100/*.yaml.
 # For Windows use run_test.py (pathlib, forward slashes). Run from cil/.
 
 CONFIG_PATH="configs/class"
 CONFIG_NAMES=(
-    "02052026_baseline"
-    "02052026_GoE-L1-H512-HeadNone"
-    "02052026_GoE-L1-H512-Head512"
-    "02052026_GoE-L1-H512-Head512_256"
-    "02052026_GoE-L1-H768-HeadNone"
-    "02052026_GoE-L1-H768-Head512"
-    "02052026_GoE-L1-H768-Head512_256"
-    "02052026_GoE-L1-H1024-HeadNone"
-    "02052026_GoE-L1-H1024-Head512"
-    "02052026_GoE-L1-H1024-Head512_256"
-    "02052026_GoE-L2-H512-HeadNone"
-    "02052026_GoE-L2-H512-Head512"
-    "02052026_GoE-L2-H512-Head512_256"
-    "02052026_GoE-L2-H768-HeadNone"
-    "02052026_GoE-L2-H768-Head512"
-    "02052026_GoE-L2-H768-Head512_256"
-    "02052026_GoE-L2-H1024-HeadNone"
-    "02052026_GoE-L2-H1024-Head512"
-    "02052026_GoE-L2-H1024-Head512_256"
-    "02052026_GoE-L3-H512-HeadNone"
-    "02052026_GoE-L3-H512-Head512"
-    "02052026_GoE-L3-H512-Head512_256"
-    "02052026_GoE-L3-H768-HeadNone"
-    "02052026_GoE-L3-H768-Head512"
-    "02052026_GoE-L3-H768-Head512_256"
-    "02052026_GoE-L3-H1024-HeadNone"
-    "02052026_GoE-L3-H1024-Head512"
-    "02052026_GoE-L3-H1024-Head512_256"
+    "02052026_uneven_cifar100/baseline"
+    "02052026_uneven_cifar100/GoE-L1-H512-HeadNone"
+    "02052026_uneven_cifar100/GoE-L1-H512-Head512"
+    "02052026_uneven_cifar100/GoE-L1-H512-Head512_256"
+    "02052026_uneven_cifar100/GoE-L1-H768-HeadNone"
+    "02052026_uneven_cifar100/GoE-L1-H768-Head512"
+    "02052026_uneven_cifar100/GoE-L1-H768-Head512_256"
+    "02052026_uneven_cifar100/GoE-L1-H1024-HeadNone"
+    "02052026_uneven_cifar100/GoE-L1-H1024-Head512"
+    "02052026_uneven_cifar100/GoE-L1-H1024-Head512_256"
+    "02052026_uneven_cifar100/GoE-L2-H512-HeadNone"
+    "02052026_uneven_cifar100/GoE-L2-H512-Head512"
+    "02052026_uneven_cifar100/GoE-L2-H512-Head512_256"
+    "02052026_uneven_cifar100/GoE-L2-H768-HeadNone"
+    "02052026_uneven_cifar100/GoE-L2-H768-Head512"
+    "02052026_uneven_cifar100/GoE-L2-H768-Head512_256"
+    "02052026_uneven_cifar100/GoE-L2-H1024-HeadNone"
+    "02052026_uneven_cifar100/GoE-L2-H1024-Head512"
+    "02052026_uneven_cifar100/GoE-L2-H1024-Head512_256"
+    "02052026_uneven_cifar100/GoE-L3-H512-HeadNone"
+    "02052026_uneven_cifar100/GoE-L3-H512-Head512"
+    "02052026_uneven_cifar100/GoE-L3-H512-Head512_256"
+    "02052026_uneven_cifar100/GoE-L3-H768-HeadNone"
+    "02052026_uneven_cifar100/GoE-L3-H768-Head512"
+    "02052026_uneven_cifar100/GoE-L3-H768-Head512_256"
+    "02052026_uneven_cifar100/GoE-L3-H1024-HeadNone"
+    "02052026_uneven_cifar100/GoE-L3-H1024-Head512"
+    "02052026_uneven_cifar100/GoE-L3-H1024-Head512_256"
 )
 NUM_RUNS=3
 
@@ -56,8 +56,8 @@ FAILED=0
 FAILED_LIST=()
 
 for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
-    # Dir name = config_name (flat names)
-    SAFE_NAME="$CONFIG_NAME"
+    # Dir name = config_name with slash replaced (e.g. 02052026_uneven_cifar100_baseline)
+    SAFE_NAME="${CONFIG_NAME//\//_}"
     echo -e "${CYAN}--- Config: $CONFIG_NAME ---${NC}"
     for i in $(seq 1 $NUM_RUNS); do
         EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")

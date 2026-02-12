@@ -13,37 +13,37 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# 28 configs in configs/class/ (flat names so Hydra resolves _archive/ from root)
+# 28 configs in configs/class/02052026_uneven_cifar100/ (use group path so _archive defaults resolve)
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "02052026_baseline",
-    "02052026_GoE-L1-H512-HeadNone",
-    "02052026_GoE-L1-H512-Head512",
-    "02052026_GoE-L1-H512-Head512_256",
-    "02052026_GoE-L1-H768-HeadNone",
-    "02052026_GoE-L1-H768-Head512",
-    "02052026_GoE-L1-H768-Head512_256",
-    "02052026_GoE-L1-H1024-HeadNone",
-    "02052026_GoE-L1-H1024-Head512",
-    "02052026_GoE-L1-H1024-Head512_256",
-    "02052026_GoE-L2-H512-HeadNone",
-    "02052026_GoE-L2-H512-Head512",
-    "02052026_GoE-L2-H512-Head512_256",
-    "02052026_GoE-L2-H768-HeadNone",
-    "02052026_GoE-L2-H768-Head512",
-    "02052026_GoE-L2-H768-Head512_256",
-    "02052026_GoE-L2-H1024-HeadNone",
-    "02052026_GoE-L2-H1024-Head512",
-    "02052026_GoE-L2-H1024-Head512_256",
-    "02052026_GoE-L3-H512-HeadNone",
-    "02052026_GoE-L3-H512-Head512",
-    "02052026_GoE-L3-H512-Head512_256",
-    "02052026_GoE-L3-H768-HeadNone",
-    "02052026_GoE-L3-H768-Head512",
-    "02052026_GoE-L3-H768-Head512_256",
-    "02052026_GoE-L3-H1024-HeadNone",
-    "02052026_GoE-L3-H1024-Head512",
-    "02052026_GoE-L3-H1024-Head512_256",
+    "02052026_uneven_cifar100/baseline",
+    "02052026_uneven_cifar100/GoE-L1-H512-HeadNone",
+    "02052026_uneven_cifar100/GoE-L1-H512-Head512",
+    "02052026_uneven_cifar100/GoE-L1-H512-Head512_256",
+    "02052026_uneven_cifar100/GoE-L1-H768-HeadNone",
+    "02052026_uneven_cifar100/GoE-L1-H768-Head512",
+    "02052026_uneven_cifar100/GoE-L1-H768-Head512_256",
+    "02052026_uneven_cifar100/GoE-L1-H1024-HeadNone",
+    "02052026_uneven_cifar100/GoE-L1-H1024-Head512",
+    "02052026_uneven_cifar100/GoE-L1-H1024-Head512_256",
+    "02052026_uneven_cifar100/GoE-L2-H512-HeadNone",
+    "02052026_uneven_cifar100/GoE-L2-H512-Head512",
+    "02052026_uneven_cifar100/GoE-L2-H512-Head512_256",
+    "02052026_uneven_cifar100/GoE-L2-H768-HeadNone",
+    "02052026_uneven_cifar100/GoE-L2-H768-Head512",
+    "02052026_uneven_cifar100/GoE-L2-H768-Head512_256",
+    "02052026_uneven_cifar100/GoE-L2-H1024-HeadNone",
+    "02052026_uneven_cifar100/GoE-L2-H1024-Head512",
+    "02052026_uneven_cifar100/GoE-L2-H1024-Head512_256",
+    "02052026_uneven_cifar100/GoE-L3-H512-HeadNone",
+    "02052026_uneven_cifar100/GoE-L3-H512-Head512",
+    "02052026_uneven_cifar100/GoE-L3-H512-Head512_256",
+    "02052026_uneven_cifar100/GoE-L3-H768-HeadNone",
+    "02052026_uneven_cifar100/GoE-L3-H768-Head512",
+    "02052026_uneven_cifar100/GoE-L3-H768-Head512_256",
+    "02052026_uneven_cifar100/GoE-L3-H1024-HeadNone",
+    "02052026_uneven_cifar100/GoE-L3-H1024-Head512",
+    "02052026_uneven_cifar100/GoE-L3-H1024-Head512_256",
 ]
 NUM_RUNS = 3
 
@@ -134,8 +134,8 @@ def main():
         print(f"--- Config: {config_name} ---")
         for i in range(1, NUM_RUNS + 1):
             exp_ts = datetime.now().strftime("%m%d%Y-%H%M%S")  # mmddyyyy-HHMMSS
-            # Dir name = config_name (flat names, no slash)
-            safe_name = config_name
+            # Dir name = config_name with slash replaced (e.g. 02052026_uneven_cifar100_baseline)
+            safe_name = config_name.replace("/", "_")
             exp_dir = SCRIPT_DIR / "experiments" / run_start / f"{safe_name}-run{i}-{exp_ts}"
             exp_dir_str = path_for_hydra(exp_dir)
             config_path_str = path_for_hydra(CONFIG_PATH_ABS)
