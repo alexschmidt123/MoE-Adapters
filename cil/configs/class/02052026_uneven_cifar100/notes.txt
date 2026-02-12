@@ -1,0 +1,15 @@
+Config name meaning (28 configs: 1 baseline + 27 GoE grid)
+Runnable configs: 02052026_*.yaml in configs/class/ (flat names).
+Key configs (self-contained, no _archive): 02052026_baseline.yaml, 02052026_GoE-L2-H768-HeadNone.yaml. Other 26 GoE configs extend the key GoE and override only graph_num_layers, graph_hidden_dim, graph_head_layers.
+
+baseline
+  MoE N8 only, no GNN. Reference for all GoE runs.
+
+GoE-L{1|2|3}-H{512|768|1024}-Head{None|512|512_256}
+  L   = graph_num_layers:  1, 2, or 3     (default: 2)
+  H   = graph_hidden_dim:  512, 768, or 1024   (default: 768 = d_model)
+  Head= graph_head_layers: None (linear), [512], or [512, 256]   (default: None)
+
+Examples:
+  GoE-L2-H768-HeadNone       = all defaults (2 layers, 768, linear head)
+  GoE-L3-H512-Head512_256    = 3 layers, hidden 512, head [512, 256]

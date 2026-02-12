@@ -27,45 +27,22 @@ MTIL implements multi-task incremental learning where different datasets/tasks a
 
 ## GNN Integration in CIL
 
-The GNN (Graph Neural Network) is integrated into the MoE system to enhance expert coordination. The architecture follows the proper flow: **Input → GNN → Router → Experts → Output**.
+The GNN (Graph Neural Network) is integrated into the MoE system to enhance expert coordination. The architecture follows: **Input → GNN → Router → Experts → Output**. The coarse router has been removed; the GNN always uses all N experts (same workflow for any N). Only `cil/graph_mixer_proper.py` is used; the legacy `graph_mixer.py` has been removed.
 
-### Architecture Diagram
+### Architecture (GoE)
 
 ```
-Input x [L, B, D]  (L=sequence length, B=batch, D=dimension)
-  │
-  └─→ CLS Pool: x_re [B, D]
-       │
-       └─→ GNN (ProperGraphExpertMixer)
-            │
-            ├─→ [For N >= 8] Coarse Router (selects top-k experts)
-            │   └─→ GNN processes selected experts only
-            │
-            └─→ [For N < 8] GNN processes all experts
-                 │
-                 └─→ Graph Message Passing
-                      ├─→ Build adjacency matrix A [B, N, N]
-                      ├─→ Node features: expert embeddings + input
-                      ├─→ Multi-layer GNN: Y = GNN(X, A)
-                      └─→ Aggregate: x_gnn [B, D]
-                           │
-                           └─→ Router (top-k gating on x_gnn)
-                                │
-                                └─→ Experts (process x_gnn)
-                                     │
-                                     └─→ Output [L, B, D]
+Input x [L, B, D]
+  └─→ CLS: x_re [B, D]
+       └─→ GNN (ProperGraphExpertMixer, all N experts)
+            ├─→ Adjacency A [B, N, N], node features
+            ├─→ Multi-layer message passing → x_gnn [B, D]
+            └─→ Router (top-k on x_gnn) → Experts (on x_gnn) → Output [L, B, D]
 ```
-
-### Key Implementation Details
-
-1. **Proper Flow**: GNN processes the input first, producing `x_gnn` which is then used by both router and experts
-2. **Hybrid Routing**: For large N (≥8), a coarse router selects a subset of experts before GNN processing
-3. **Graph Structure**: Each expert is a node; adjacency matrix captures expert relationships
-4. **Location**: Implemented in `cil/graph_mixer_proper.py` and integrated in `cil/clip/model.py`
 
 ### Enabling GNN
 
-Set `graph_mixer_enabled: true` in your config file. The system automatically uses the proper GNN structure when available.
+Set `graph_mixer_enabled: true` in your config. Implemented in `cil/graph_mixer_proper.py` and `cil/clip/model.py`.
 
 ## Running CIL
 
@@ -95,6 +72,7 @@ bash run_all_cifar_test.sh
 
 ### Test Scripts
 
+- `run_test.py` / `run_test.sh`: Run 28 configs (1 baseline MoE + 27 GoE grid) under `configs/class/` as `02052026_baseline.yaml`, `02052026_GoE-L*-H*-Head*.yaml` (flat names; timestamp mmddyyyy), 3 runs each; then write `summary.csv` (last_acc, avg_acc per run and per-config averages). `run_test.py` is Windows-friendly (pathlib, forward slashes for Hydra).
 - `run_all_cifar_test.py` / `run_all_cifar_test.sh`: Quick test (8 configs)
 - `run_all_cifar.py` / `run_all_cifar.sh`: Full CIFAR-100 suite
 - `run_all_imagenet.py` / `run_all_imagenet.sh`: ImageNet suite

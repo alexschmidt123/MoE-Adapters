@@ -5,6 +5,7 @@
 # All results go to experiments/ only (no "output" or "outputs" folder).
 hydra:
   run:
+    # Timestamp format: mmddyyyy-HHMMSS
     dir: ./experiments/${scenario}/${config_name_no_ext:}-${now:%m%d%Y-%H%M%S}
   job:
     chdir: true

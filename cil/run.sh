@@ -62,7 +62,7 @@ if [ "$2" != "" ]; then
 fi
 echo "=========================================="
 
-# Generate run start timestamp (format: MMDDYYYY-HHMMSS)
+# Timestamp format: mmddyyyy-HHMMSS
 RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
 EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
 echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/${CONFIG_NAME}-${EXP_TIMESTAMP}/"

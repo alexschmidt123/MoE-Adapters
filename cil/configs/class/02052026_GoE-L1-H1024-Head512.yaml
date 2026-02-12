@@ -1,0 +1,11 @@
+# GoE grid: graph_num_layers=1, graph_hidden_dim=1024, graph_head_layers=[512].
+# Run: bash run.sh configs/class/02052026_GoE-L1-H1024-Head512.yaml
+
+defaults:
+  - 02052026_GoE-L2-H768-HeadNone
+  - _self_
+
+model:
+  graph_num_layers: 1
+  graph_hidden_dim: 1024
+  graph_head_layers: [512]

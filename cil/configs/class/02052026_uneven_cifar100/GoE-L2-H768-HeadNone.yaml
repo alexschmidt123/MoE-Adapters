@@ -1,0 +1,11 @@
+# GoE grid: graph_num_layers=2, graph_hidden_dim=768 (d_model, default), graph_head_layers=linear.
+# Run: bash run.sh configs/class/02052026_uneven_cifar100/GoE-L2-H768-HeadNone.yaml
+
+defaults:
+  - _archive/uneven_cifar100/cifar100_uneven10_heavy-MoE-Adapters-N8-GoE
+  - _self_
+
+model:
+  graph_num_layers: 2
+  graph_hidden_dim: 768
+  graph_head_layers: null

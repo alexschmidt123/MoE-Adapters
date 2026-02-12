@@ -1,0 +1,9 @@
+# Baseline: MoE N8 only (no GNN). Heavy uneven task_sizes.
+# 1 of 28 configs: graph_num_layers × graph_hidden_dim × graph_head_layers + baseline.
+# Run: bash run.sh configs/class/02052026_uneven_cifar100/baseline.yaml
+
+defaults:
+  - _archive/uneven_cifar100/cifar100_uneven10_heavy-MoE-Adapters-N8
+  - _self_
+
+# No model overrides; MoE only (no graph_mixer)

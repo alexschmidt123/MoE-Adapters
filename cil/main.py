@@ -84,7 +84,6 @@ def _normalize_cfg(cfg: DictConfig) -> DictConfig:
         if key.startswith("_") or key == "hydra":
             continue
         if isinstance(val, dict):
-            # Config group: merge its contents to root so scenario, dataset, model, etc. are at top level
             for k, v in val.items():
                 if k.startswith("_"):
                     continue
@@ -113,7 +112,7 @@ def continual_clip(cfg: DictConfig) -> None:
     if "experiments" not in os.path.normpath(os.path.abspath(cwd)):
         redirect_dir = os.path.join(
             experiments_root,
-            "run-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
+            "run-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S")  # mmddyyyy-HHMMSS
         )
         os.makedirs(redirect_dir, exist_ok=True)
         os.chdir(redirect_dir)

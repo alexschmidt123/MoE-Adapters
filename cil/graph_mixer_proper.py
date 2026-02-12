@@ -2,7 +2,7 @@
 Proper Graph Neural Network for MoE/HMoE Systems
 
 Implements the correct structure: Input → GNN → Router → Experts → Output
-With hybrid approach: Router before GNN only for large N (>= 8)
+Always uses all N experts in the graph (same workflow for any N).
 """
 
 import torch
@@ -54,9 +54,8 @@ class ProperGraphExpertMixer(nn.Module):
     """
     Proper GNN structure: Processes input first, outputs GNN-enhanced representation.
     
-    Structure: Input → GNN → (output used by Router → Experts)
-    
-    For large N (>= 8), can optionally use a coarse router to select experts before GNN.
+    Structure: Input → GNN (all N experts) → (output used by Router → Experts)
+    Same workflow for any N; no coarse router.
     """
     
     def __init__(
@@ -65,8 +64,6 @@ class ProperGraphExpertMixer(nn.Module):
         num_experts: int,
         num_layers: int = 2,
         hidden_dim: Optional[int] = None,
-        use_coarse_router: bool = False,
-        coarse_router_k: Optional[int] = None,
         symmetrize: bool = True,
         add_self_loop: bool = True,
         activation: str = "gelu",
@@ -82,19 +79,9 @@ class ProperGraphExpertMixer(nn.Module):
         self.num_experts = num_experts
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim or d_model
-        self.use_coarse_router = use_coarse_router
-        self.coarse_router_k = coarse_router_k or (num_experts // 2)  # Default: half of experts
         self.symmetrize = symmetrize
         self.add_self_loop = add_self_loop
         self.residual = residual
-        
-        # Coarse router (only used if use_coarse_router=True and N >= 8)
-        if self.use_coarse_router and num_experts >= 8:
-            self.coarse_router = nn.Linear(d_model, num_experts)
-            self.coarse_softmax = nn.Softmax(dim=-1)
-        else:
-            self.coarse_router = None
-            self.use_coarse_router = False  # Disable if N < 8
         
         # Node feature embeddings (one per expert)
         # These represent expert-specific features
@@ -132,6 +119,10 @@ class ProperGraphExpertMixer(nn.Module):
         
         # Output projection (back to d_model)
         self.output_proj = nn.Linear(self.hidden_dim, d_model)
+        # Zero-init so at start x_gnn ≈ 0 → router gets uniform input → GoE starts close to MoE baseline
+        nn.init.zeros_(self.output_proj.weight)
+        if self.output_proj.bias is not None:
+            nn.init.zeros_(self.output_proj.bias)
         
         # Activation
         if activation.lower() == "gelu":
@@ -158,63 +149,30 @@ class ProperGraphExpertMixer(nn.Module):
         """
         B = x_sample.shape[0]
         N = self.num_experts
-        D = self.d_model
         
-        # Optional: Coarse router to select subset of experts (for large N)
-        if self.use_coarse_router and self.coarse_router is not None:
-            # Coarse selection: select top-k experts
-            coarse_logits = self.coarse_router(x_sample)  # [B, N]
-            coarse_gates = self.coarse_softmax(coarse_logits)  # [B, N]
-            _, selected_indices = coarse_gates.topk(self.coarse_router_k, dim=1)  # [B, k]
-            # Get unique selected expert indices across batch
-            selected_experts_unique = selected_indices.unique().sort()[0]  # [k_unique]
-            N_active = len(selected_experts_unique)
-            selected_experts = selected_experts_unique.cpu().tolist()  # Convert to list for indexing
-            selected_experts_tensor = selected_experts_unique  # Keep tensor version
-        else:
-            # Use all experts
-            selected_experts = list(range(N))
-            selected_experts_tensor = torch.arange(N, device=x_sample.device, dtype=torch.long)
-            N_active = N
-        
-        # 1. Build node features
-        # Combine input projection with expert embeddings
+        # 1. Build node features (all N experts)
         x_proj = self.input_proj(x_sample)  # [B, hidden_dim]
+        node_features = x_proj.unsqueeze(1).expand(-1, N, -1) + self.expert_embeddings.unsqueeze(0)  # [B, N, hidden_dim]
         
-        # Create node features: [B, N_active, hidden_dim]
-        # Each node gets input projection + expert-specific embedding
-        node_features = x_proj.unsqueeze(1).expand(-1, N_active, -1)  # [B, N_active, hidden_dim]
-        expert_emb = self.expert_embeddings[selected_experts_tensor]  # [N_active, hidden_dim]
-        node_features = node_features + expert_emb.unsqueeze(0)  # [B, N_active, hidden_dim]
-        
-        # 2. Build adjacency matrix (for selected experts)
-        A_logits = self.adjacency_head(x_sample).view(B, N, N)  # [B, N, N]
-        
-        # Extract adjacency for selected experts
-        A_logits = A_logits[:, selected_experts_tensor][:, :, selected_experts_tensor]  # [B, N_active, N_active]
-        
-        # Optional symmetrization
+        # 2. Build adjacency matrix [B, N, N]
+        A_logits = self.adjacency_head(x_sample).view(B, N, N)
         if self.symmetrize:
             A_logits = (A_logits + A_logits.transpose(-2, -1)) / 2.0
-        
-        # Optional self-loops
         if self.add_self_loop:
-            eye = torch.eye(N_active, device=A_logits.device, dtype=A_logits.dtype)
-            A_logits = A_logits + eye.unsqueeze(0)  # [B, N_active, N_active]
-        
-        # Row-wise softmax to get row-stochastic adjacency
-        A = F.softmax(A_logits, dim=-1)  # [B, N_active, N_active]
+            eye = torch.eye(N, device=A_logits.device, dtype=A_logits.dtype)
+            A_logits = A_logits + eye.unsqueeze(0)
+        A = F.softmax(A_logits, dim=-1)  # row-stochastic
         
         # 3. Multi-layer message passing
-        Y = node_features  # [B, N_active, hidden_dim]
+        Y = node_features  # [B, N, hidden_dim]
         for i, gnn_layer in enumerate(self.gnn_layers):
-            Y_new = gnn_layer(Y, A)  # [B, N_active, hidden_dim]
+            Y_new = gnn_layer(Y, A)
             if self.residual and i > 0:
-                Y = Y + Y_new  # Residual connection
+                Y = Y + Y_new
             else:
                 Y = Y_new
         
-        # 4. Aggregate node features (mean pooling over experts)
+        # 4. Aggregate node features (mean over experts)
         Y_agg = Y.mean(dim=1)  # [B, hidden_dim]
         
         # 5. Project back to d_model

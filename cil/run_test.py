@@ -1,59 +1,131 @@
 #!/usr/bin/env python3
 """
-Run uneven CIFAR-100 configs, each 3 times.
-Same logic as run_test.sh, Windows-friendly (pathlib, subprocess).
-Uses POSIX-style paths for Hydra to avoid Windows backslash issues.
+Run 28 configs (1 baseline + 27 GoE grid), 3 times each; then generate summary.csv.
+Windows-friendly: pathlib, forward slashes for Hydra, no reliance on os.path for joins.
 """
+import csv
+import json
 import os
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# Configs: N8 only (2 configs × 3 runs)
+# 28 configs in configs/class/ (flat names so Hydra resolves _archive/ from root)
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8",
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8-GoE",
+    "02052026_baseline",
+    "02052026_GoE-L1-H512-HeadNone",
+    "02052026_GoE-L1-H512-Head512",
+    "02052026_GoE-L1-H512-Head512_256",
+    "02052026_GoE-L1-H768-HeadNone",
+    "02052026_GoE-L1-H768-Head512",
+    "02052026_GoE-L1-H768-Head512_256",
+    "02052026_GoE-L1-H1024-HeadNone",
+    "02052026_GoE-L1-H1024-Head512",
+    "02052026_GoE-L1-H1024-Head512_256",
+    "02052026_GoE-L2-H512-HeadNone",
+    "02052026_GoE-L2-H512-Head512",
+    "02052026_GoE-L2-H512-Head512_256",
+    "02052026_GoE-L2-H768-HeadNone",
+    "02052026_GoE-L2-H768-Head512",
+    "02052026_GoE-L2-H768-Head512_256",
+    "02052026_GoE-L2-H1024-HeadNone",
+    "02052026_GoE-L2-H1024-Head512",
+    "02052026_GoE-L2-H1024-Head512_256",
+    "02052026_GoE-L3-H512-HeadNone",
+    "02052026_GoE-L3-H512-Head512",
+    "02052026_GoE-L3-H512-Head512_256",
+    "02052026_GoE-L3-H768-HeadNone",
+    "02052026_GoE-L3-H768-Head512",
+    "02052026_GoE-L3-H768-Head512_256",
+    "02052026_GoE-L3-H1024-HeadNone",
+    "02052026_GoE-L3-H1024-Head512",
+    "02052026_GoE-L3-H1024-Head512_256",
 ]
 NUM_RUNS = 3
 
-# Resolve paths relative to script directory (works from any cwd on Windows/Linux)
+# Resolve paths relative to script dir (works from any cwd; Windows-safe)
 SCRIPT_DIR = Path(__file__).resolve().parent
-# Use forward slashes so Path joins correctly on Windows (Path treats both / and \)
 CONFIG_PATH_ABS = SCRIPT_DIR / CONFIG_PATH.replace("\\", "/")
 
 
-def _path_for_hydra(p: Path) -> str:
-    """Path string safe for Hydra on Windows: use forward slashes."""
+def path_for_hydra(p: Path) -> str:
+    """Forward slashes for Hydra (avoids Windows backslash issues)."""
     return p.as_posix()
 
 
-def _is_oom(stderr: str) -> bool:
-    """True if stderr indicates CUDA/system out-of-memory."""
+def is_oom(stderr: str) -> bool:
     if not stderr:
         return False
     s = stderr.lower()
     return "out of memory" in s or "outofmemoryerror" in s or "cuda out of memory" in s
 
 
+def read_last_avg(metrics_path: Path):
+    """Read last_acc and avg_acc from metrics.json (last line with 'last' and 'avg')."""
+    try:
+        text = metrics_path.read_text(encoding="utf-8", errors="replace")
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            return None, None
+        last_line = json.loads(lines[-1])
+        if "last" in last_line and "avg" in last_line:
+            return float(last_line["last"]), float(last_line["avg"])
+        return None, None
+    except Exception:
+        return None, None
+
+
+def write_summary_csv(run_dir: Path, runs: list, out_path: Path):
+    """runs = [(config_name, run_id, exp_dir), ...]. Write CSV: per-run rows + per-config avg rows."""
+    rows = []
+    for config_name, run_id, exp_dir in runs:
+        metrics_path = Path(exp_dir) / "metrics.json"
+        last_acc, avg_acc = read_last_avg(metrics_path)
+        rows.append({
+            "config_name": config_name,
+            "run_id": run_id,
+            "last_acc": "" if last_acc is None else f"{last_acc:.2f}",
+            "avg_acc": "" if avg_acc is None else f"{avg_acc:.2f}",
+        })
+    # Per-config averages (same config_name, 3 runs)
+    by_config = defaultdict(list)
+    for r in rows:
+        if r["last_acc"] != "" and r["avg_acc"] != "":
+            by_config[r["config_name"]].append((float(r["last_acc"]), float(r["avg_acc"])))
+    for config_name in sorted(by_config.keys()):
+        vals = by_config[config_name]
+        mean_last = sum(x[0] for x in vals) / len(vals)
+        mean_avg = sum(x[1] for x in vals) / len(vals)
+        rows.append({
+            "config_name": config_name,
+            "run_id": "avg",
+            "last_acc": f"{mean_last:.2f}",
+            "avg_acc": f"{mean_avg:.2f}",
+        })
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["config_name", "run_id", "last_acc", "avg_acc"])
+        w.writeheader()
+        w.writerows(rows)
+    print(f"Wrote {out_path}")
+
+
 def main():
-    run_start = datetime.now().strftime("%m%d%Y-%H%M%S")
+    run_start = datetime.now().strftime("%m%d%Y-%H%M%S")  # mmddyyyy-HHMMSS
     results_dir = SCRIPT_DIR / "experiments" / run_start
+    # Track (config_name, run_id, exp_dir) for summary
+    completed_runs = []
 
     print("==========================================")
-    print(f"Uneven CIFAR-100 test: {len(CONFIG_NAMES)} configs x {NUM_RUNS} runs")
+    print(f"28 configs x {NUM_RUNS} runs = {len(CONFIG_NAMES) * NUM_RUNS} total")
     print("==========================================")
-    print("Configs:", " ".join(CONFIG_NAMES))
-    print(f"Runs per config: {NUM_RUNS}")
-    print(f"Results: {results_dir}")
+    print(f"Results: {path_for_hydra(results_dir)}")
     print("==========================================")
     print()
-
-    successful = 0
-    failed = 0
-    failed_list = []
 
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
@@ -61,12 +133,12 @@ def main():
     for config_name in CONFIG_NAMES:
         print(f"--- Config: {config_name} ---")
         for i in range(1, NUM_RUNS + 1):
-            exp_ts = datetime.now().strftime("%m%d%Y-%H%M%S")
-            # Build path with forward slashes (Path handles them on Windows)
-            exp_dir = SCRIPT_DIR / "experiments" / run_start / f"{config_name}-run{i}-{exp_ts}"
-            # Use POSIX-style path for Hydra to avoid Windows backslash/escape issues
-            exp_dir_str = _path_for_hydra(exp_dir)
-            config_path_str = _path_for_hydra(CONFIG_PATH_ABS)
+            exp_ts = datetime.now().strftime("%m%d%Y-%H%M%S")  # mmddyyyy-HHMMSS
+            # Dir name = config_name (flat names, no slash)
+            safe_name = config_name
+            exp_dir = SCRIPT_DIR / "experiments" / run_start / f"{safe_name}-run{i}-{exp_ts}"
+            exp_dir_str = path_for_hydra(exp_dir)
+            config_path_str = path_for_hydra(CONFIG_PATH_ABS)
 
             print(f"Run {i}/{NUM_RUNS}: {config_name} (batch_size=32)")
 
@@ -75,11 +147,10 @@ def main():
                 sys.executable,
                 os.fspath(main_py),
                 "--config-path", config_path_str,
-                "--config-name", f"{config_name}.yaml",
+                "--config-name", config_name,
                 f"hydra.run.dir={exp_dir_str}",
             ]
             try:
-                # First try: use config default (32). Don't capture stdout so output streams and run doesn't look stuck.
                 err_fd = tempfile.NamedTemporaryFile(mode="w", suffix=".err", delete=False)
                 err_path = err_fd.name
                 err_fd.close()
@@ -100,12 +171,11 @@ def main():
                         os.remove(err_path)
 
                 if ret.returncode == 0:
-                    successful += 1
+                    completed_runs.append((config_name, i, exp_dir))
                     print(f"Run {i}/{NUM_RUNS} completed: {config_name}")
                     print()
                     continue
-                # Failed: retry with batch_size=12 if OOM
-                if _is_oom(stderr_content):
+                if is_oom(stderr_content):
                     print("OOM detected; retrying with batch_size=12 ...")
                     cmd_retry = cmd_base + ["batch_size=12"]
                     err_fd2 = tempfile.NamedTemporaryFile(mode="w", suffix=".err", delete=False)
@@ -124,39 +194,33 @@ def main():
                         if os.path.exists(err_path2):
                             os.remove(err_path2)
                     if ret2.returncode == 0:
-                        successful += 1
+                        completed_runs.append((config_name, i, exp_dir))
                         print(f"Run {i}/{NUM_RUNS} completed: {config_name} (batch_size=12)")
                         print()
                         continue
-                # Still failed or non-OOM failure
-                failed += 1
-                failed_list.append(f"{config_name} run {i}")
                 print(f"Failed: {config_name} run {i}")
                 if stderr_content.strip():
-                    print("Last 30 lines of stderr:")
                     for line in stderr_content.strip().splitlines()[-30:]:
                         print(line)
                 continue
             except Exception as e:
-                failed += 1
-                failed_list.append(f"{config_name} run {i}")
                 print(f"Failed: {config_name} run {i} ({e})")
                 continue
         print()
 
+    # Summary CSV: all runs + avg rows per config
+    summary_path = results_dir / "summary.csv"
+    write_summary_csv(results_dir, completed_runs, summary_path)
+
     print("==========================================")
     print("Summary")
     print("==========================================")
-    print(f"Successful: {successful}")
-    print(f"Failed: {failed}")
-    if failed_list:
-        print("Failed:")
-        for item in failed_list:
-            print(f"  - {item}")
-    print(f"Results: {results_dir}")
+    print(f"Completed: {len(completed_runs)} / {len(CONFIG_NAMES) * NUM_RUNS}")
+    print(f"Results: {path_for_hydra(results_dir)}")
+    print(f"CSV: {path_for_hydra(summary_path)}")
     print("==========================================")
 
-    sys.exit(0 if failed == 0 else 1)
+    sys.exit(0 if len(completed_runs) == len(CONFIG_NAMES) * NUM_RUNS else 1)
 
 
 if __name__ == "__main__":

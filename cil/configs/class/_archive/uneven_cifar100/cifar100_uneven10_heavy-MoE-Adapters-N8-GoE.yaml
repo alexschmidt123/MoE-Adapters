@@ -1,0 +1,15 @@
+# CIFAR-100 uneven 10 tasks — heavily uneven class distribution; MoE-GNN (GoE), N=8.
+# task_sizes: [50, 2, 1, 20, 20, 1, 2, 2, 1, 1] (sum=100).
+# Run: bash run.sh configs/class/uneven_cifar100/cifar100_uneven10_heavy-MoE-Adapters-N8-GoE.yaml
+# Improved vs baseline MoE N8: zero-init GNN out, CLS residual, deeper head/layers. Coarse removed: GNN always uses all N experts.
+
+defaults:
+  - cifar100_uneven10-MoE-Adapters-N8-GoE
+  - _self_
+
+task_sizes: [50, 2, 1, 20, 20, 1, 2, 2, 1, 1]
+
+model:
+  graph_num_layers: 3              # deeper message passing
+  graph_head_layers: [512, 256]    # deeper adjacency predictor
+  goe_residual_alpha: 0.1          # blend CLS back into router/expert input for stability

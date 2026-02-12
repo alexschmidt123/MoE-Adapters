@@ -1,0 +1,9 @@
+# CIFAR-100 uneven 10 tasks — heavily uneven class distribution; MoE only (no GNN), N=8.
+# task_sizes: [50, 2, 1, 20, 20, 1, 2, 2, 1, 1] (sum=100).
+# Run: bash run.sh configs/class/uneven_cifar100/cifar100_uneven10_heavy-MoE-Adapters-N8.yaml
+
+defaults:
+  - cifar100_uneven10-MoE-Adapters-N8
+  - _self_
+
+task_sizes: [50, 2, 1, 20, 20, 1, 2, 2, 1, 1]

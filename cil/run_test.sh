@@ -1,11 +1,38 @@
 #!/bin/bash
-# Run uneven CIFAR-100 configs, each 3 times. N8 only.
-# Configs: N8, N8-GoE (2 configs × 3 runs = 6 runs).
+# Run 28 configs (1 baseline + 27 GoE grid), 3 runs each; then generate summary.csv.
+# Same configs as run_test.py. Configs: configs/class/02052026_*.yaml (flat names).
+# For Windows use run_test.py (pathlib, forward slashes). Run from cil/.
 
 CONFIG_PATH="configs/class"
 CONFIG_NAMES=(
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8"
-    "uneven_cifar100/cifar100_uneven10-MoE-Adapters-N8-GoE"
+    "02052026_baseline"
+    "02052026_GoE-L1-H512-HeadNone"
+    "02052026_GoE-L1-H512-Head512"
+    "02052026_GoE-L1-H512-Head512_256"
+    "02052026_GoE-L1-H768-HeadNone"
+    "02052026_GoE-L1-H768-Head512"
+    "02052026_GoE-L1-H768-Head512_256"
+    "02052026_GoE-L1-H1024-HeadNone"
+    "02052026_GoE-L1-H1024-Head512"
+    "02052026_GoE-L1-H1024-Head512_256"
+    "02052026_GoE-L2-H512-HeadNone"
+    "02052026_GoE-L2-H512-Head512"
+    "02052026_GoE-L2-H512-Head512_256"
+    "02052026_GoE-L2-H768-HeadNone"
+    "02052026_GoE-L2-H768-Head512"
+    "02052026_GoE-L2-H768-Head512_256"
+    "02052026_GoE-L2-H1024-HeadNone"
+    "02052026_GoE-L2-H1024-Head512"
+    "02052026_GoE-L2-H1024-Head512_256"
+    "02052026_GoE-L3-H512-HeadNone"
+    "02052026_GoE-L3-H512-Head512"
+    "02052026_GoE-L3-H512-Head512_256"
+    "02052026_GoE-L3-H768-HeadNone"
+    "02052026_GoE-L3-H768-Head512"
+    "02052026_GoE-L3-H768-Head512_256"
+    "02052026_GoE-L3-H1024-HeadNone"
+    "02052026_GoE-L3-H1024-Head512"
+    "02052026_GoE-L3-H1024-Head512_256"
 )
 NUM_RUNS=3
 
@@ -15,12 +42,11 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Timestamp format: mmddyyyy-HHMMSS
 RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
 echo "=========================================="
-echo "Uneven CIFAR-100 test: ${#CONFIG_NAMES[@]} configs × $NUM_RUNS runs"
+echo "28 configs x $NUM_RUNS runs = $((${#CONFIG_NAMES[@]} * NUM_RUNS)) total"
 echo "=========================================="
-echo "Configs: ${CONFIG_NAMES[*]}"
-echo "Runs per config: $NUM_RUNS"
 echo "Results: experiments/${RUN_START_TIMESTAMP}/"
 echo "=========================================="
 echo ""
@@ -30,24 +56,25 @@ FAILED=0
 FAILED_LIST=()
 
 for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
+    # Dir name = config_name (flat names)
+    SAFE_NAME="$CONFIG_NAME"
     echo -e "${CYAN}--- Config: $CONFIG_NAME ---${NC}"
     for i in $(seq 1 $NUM_RUNS); do
         EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
-        EXP_DIR="experiments/${RUN_START_TIMESTAMP}/${CONFIG_NAME}-run${i}-${EXP_TIMESTAMP}"
+        EXP_DIR="experiments/${RUN_START_TIMESTAMP}/${SAFE_NAME}-run${i}-${EXP_TIMESTAMP}"
         echo -e "${BLUE}Run $i/$NUM_RUNS: $CONFIG_NAME (batch_size=32)${NC}"
 
-        # First try with config default (32); on OOM retry with batch_size=12
         OOM_ERR=$(mktemp 2>/dev/null || echo /tmp/run_test_oom.$$)
         CUDA_VISIBLE_DEVICES=0 python main.py \
             --config-path "$CONFIG_PATH" \
-            --config-name "${CONFIG_NAME}.yaml" \
+            --config-name "$CONFIG_NAME" \
             hydra.run.dir="$EXP_DIR" 2> "$OOM_ERR"
         CODE=$?
         if [ $CODE -ne 0 ] && grep -qiE "out of memory|outofmemoryerror|cuda out of memory" "$OOM_ERR" 2>/dev/null; then
             echo -e "${BLUE}OOM detected; retrying with batch_size=12 ...${NC}"
             CUDA_VISIBLE_DEVICES=0 python main.py \
                 --config-path "$CONFIG_PATH" \
-                --config-name "${CONFIG_NAME}.yaml" \
+                --config-name "$CONFIG_NAME" \
                 hydra.run.dir="$EXP_DIR" \
                 batch_size=12 2> "$OOM_ERR"
             CODE=$?
@@ -67,6 +94,9 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
     echo ""
 done
 
+# Generate summary.csv (last_acc, avg_acc per run + per-config avg rows)
+python generate_run_summary.py "experiments/${RUN_START_TIMESTAMP}"
+
 echo "=========================================="
 echo "Summary"
 echo "=========================================="
@@ -77,6 +107,7 @@ if [ ${#FAILED_LIST[@]} -gt 0 ]; then
     printf '  - %s\n' "${FAILED_LIST[@]}"
 fi
 echo "Results: experiments/${RUN_START_TIMESTAMP}/"
+echo "CSV: experiments/${RUN_START_TIMESTAMP}/summary.csv"
 echo "=========================================="
 
 [ $FAILED -eq 0 ] && exit 0 || exit 1
