@@ -58,6 +58,7 @@ class UnevenClassIncremental:
     """
     Scenario with uneven task sizes. Same interface as continuum Scenario: len(scenario), scenario[i], scenario[i:j].
     task_sizes: list of ints, e.g. [5, 15, 8, 12, 10, 8, 15, 10, 10, 7] for 10 tasks summing to 100.
+    Each task must have at least 2 classes (min(task_sizes) >= 2).
     """
 
     def __init__(self, dataset, class_order, task_sizes, transformations):
@@ -69,6 +70,11 @@ class UnevenClassIncremental:
             raise ValueError(
                 "task_sizes must sum to len(class_order): "
                 f"sum(task_sizes)={sum(self.task_sizes)} != len(class_order)={len(self.class_order)}"
+            )
+        if min(self.task_sizes) < 2:
+            raise ValueError(
+                f"Each task must have at least 2 classes; got task_sizes={self.task_sizes}. "
+                "Single-class tasks are not allowed."
             )
         x, y, t_old = dataset.get_data()
         # Map class_id -> task_id: class_order[pos] belongs to task_id where pos in [start, start+size)

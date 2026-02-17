@@ -36,22 +36,34 @@ def get_num_tasks(args):
 
 
 def get_class_ids_per_task(args):
-    # Uneven split: task_sizes = [n1, n2, ...], sum must equal len(class_order)
+    # Uneven split: task_sizes = [n1, n2, ...], sum must equal len(class_order); each task must have at least 2 classes
     if getattr(args, "task_sizes", None) is not None:
         task_sizes = list(args.task_sizes)
         if sum(task_sizes) != len(args.class_order):
             raise ValueError(
                 f"task_sizes must sum to len(class_order): sum={sum(task_sizes)} != {len(args.class_order)}"
             )
+        if min(task_sizes) < 2:
+            raise ValueError(
+                f"Each task must have at least 2 classes; got task_sizes={task_sizes}. "
+                "Single-class tasks are not allowed."
+            )
         start = 0
         for n in task_sizes:
             yield args.class_order[start : start + n]
             start += n
         return
-    # Even split: initial_increment then increment per task
-    yield args.class_order[:args.initial_increment]
-    for i in range(args.initial_increment, len(args.class_order), args.increment):
-        yield args.class_order[i:i + args.increment]
+    # Even split: initial_increment then increment per task; each task must have at least 2 classes
+    initial = getattr(args, "initial_increment", 10)
+    inc = getattr(args, "increment", 10)
+    if initial < 2 or inc < 2:
+        raise ValueError(
+            f"Each task must have at least 2 classes; got initial_increment={initial}, increment={inc}. "
+            "Use initial_increment >= 2 and increment >= 2."
+        )
+    yield args.class_order[:initial]
+    for i in range(initial, len(args.class_order), inc):
+        yield args.class_order[i:i + inc]
 
 def get_class_names(classes_names, class_ids_per_task):
     return [classes_names[class_id] for class_id in class_ids_per_task]

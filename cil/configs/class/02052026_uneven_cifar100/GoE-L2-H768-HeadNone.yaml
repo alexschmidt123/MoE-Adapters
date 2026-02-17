@@ -22,7 +22,7 @@ prompt_template: "a bad photo of a {}."
 batch_size: 32
 scenario: "class"
 dataset: "cifar100"
-task_sizes: [50, 2, 1, 20, 20, 1, 2, 2, 1, 1]
+task_sizes: [46, 2, 2, 20, 20, 2, 2, 2, 2, 2]  # min 2 classes per task; sum=100
 increment: 10
 initial_increment: 10
 
