@@ -135,17 +135,20 @@ class ProperGraphExpertMixer(nn.Module):
     def forward(
         self,
         x_sample: torch.Tensor,
-        is_train: bool = True
-    ) -> torch.Tensor:
+        is_train: bool = True,
+        return_per_expert: bool = False
+    ):
         """
         Forward pass: Processes input and returns GNN-enhanced representation.
         
         Args:
             x_sample: Pooled input representation [B, D]
             is_train: Whether in training mode
+            return_per_expert: If True, return (x_gnn, Y) with Y [B, N, H] for per-expert routing.
             
         Returns:
-            x_gnn: GNN-processed representation [B, D] (to be used by router and experts)
+            If return_per_expert False: x_gnn [B, D]
+            If return_per_expert True: (x_gnn [B, D], Y [B, N, hidden_dim])
         """
         B = x_sample.shape[0]
         N = self.num_experts
@@ -172,12 +175,14 @@ class ProperGraphExpertMixer(nn.Module):
             else:
                 Y = Y_new
         
-        # 4. Aggregate node features (mean over experts)
+        # 4. Aggregate node features (mean over experts) for backward-compat x_gnn
         Y_agg = Y.mean(dim=1)  # [B, hidden_dim]
         
         # 5. Project back to d_model
         x_gnn = self.output_proj(Y_agg)  # [B, D]
         
+        if return_per_expert:
+            return (x_gnn, Y)
         return x_gnn
 
 

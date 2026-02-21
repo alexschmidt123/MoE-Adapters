@@ -51,3 +51,8 @@ model:
   graph_noise_epsilon: 0.0
   goe_residual_alpha: 0.1
   moe_load_balance_weight: 0.01
+  # GoE v2: experts on token-level x (not broadcast GNN output); route from per-expert GNN states
+  goe_experts_on_x: true
+  goe_route_from_per_expert: true
+  # Freeze GNN after this task index to reduce drift (-1 = never freeze, 0 = freeze after task 0)
+  goe_freeze_gnn_after_task: -1

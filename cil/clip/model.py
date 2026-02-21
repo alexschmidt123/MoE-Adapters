@@ -517,7 +517,17 @@ class ResidualAttentionBlock(nn.Module):
                     graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
                 )
                 self.use_proper_gnn = True
-                print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N)")
+                # Per-expert routing: logits Z[b,i] from Y[b,i] via goe_router_w [N, H] per task
+                graph_hidden_dim = self.graph_mixer.hidden_dim
+                self.goe_router_w_list = nn.ParameterList()
+                for _ in range(self.step):
+                    self.goe_router_w_list.append(
+                        nn.Parameter(torch.randn(self.experts_num, graph_hidden_dim) * 0.02, requires_grad=True)
+                    )
+                self.goe_experts_on_x = bool(getattr(cfg.model, 'goe_experts_on_x', True))
+                self.goe_route_from_per_expert = bool(getattr(cfg.model, 'goe_route_from_per_expert', True))
+                self.goe_freeze_gnn_after_task = int(getattr(cfg.model, 'goe_freeze_gnn_after_task', -1))
+                print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}")
                 self.alpha_graph = None
                 self.graph_entropy_weight = 0.0
             else:
@@ -687,6 +697,37 @@ class ResidualAttentionBlock(nn.Module):
             load = self._gates_to_load(gates)
         return gates, load, full_gates
 
+    def noisy_top_k_gating_from_logits(
+        self, logits: torch.Tensor, train: bool, x_for_noise: torch.Tensor,
+        w_noise: torch.Tensor, noise_epsilon: float = 1e-2, top_k_override=None
+    ):
+        """Noisy top-k gating when logits [B, N] are already computed (e.g. from per-expert GNN states). Noise uses x_for_noise @ w_noise."""
+        k = top_k_override if top_k_override is not None else self.top_k
+        k = min(max(1, k), self.experts_num)
+        clean_logits = logits
+        if self.noisy_gating and train:
+            raw_noise_stddev = x_for_noise @ w_noise.to(x_for_noise)
+            noise_stddev = (self.softplus(raw_noise_stddev) + noise_epsilon)
+            noisy_logits = clean_logits + (torch.randn_like(clean_logits) * noise_stddev)
+            logits = noisy_logits
+        else:
+            noisy_logits = clean_logits
+            noise_stddev = None
+        full_gates = self.softmax(logits)
+        num_cols = logits.size(1)
+        top_logits, top_indices = logits.topk(min(k + 1, num_cols), dim=1)
+        top_k_logits = top_logits[:, :k]
+        top_k_indices = top_indices[:, :k].long().clamp(0, max(0, num_cols - 1))
+        top_k_gates = self.softmax(top_k_logits)
+        zeros = torch.zeros_like(logits)
+        top_k_indices = top_k_indices.to(device=zeros.device).contiguous()
+        gates = zeros.scatter(1, top_k_indices, top_k_gates)
+        if self.noisy_gating and k < self.experts_num and train and noise_stddev is not None:
+            load = (self._prob_in_top_k(clean_logits, noisy_logits, noise_stddev, top_logits, k_used=k)).sum(0)
+        else:
+            load = self._gates_to_load(gates)
+        return gates, load, full_gates
+
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
         if global_taskid is not None:
@@ -701,32 +742,48 @@ class ResidualAttentionBlock(nn.Module):
                     self.experts_num,
                     max(1, self.top_k + (global_num_classes_current_task - self.task_adaptive_top_k_base) // self.task_adaptive_top_k_step)
                 )
-            # PROPER STRUCTURE: Input → GNN → Router → Experts → Output
+            # PROPER STRUCTURE: Input → GNN → Router (from per-expert or pooled) → Experts (on x or x_gnn) → Output
             if self.graph_enabled and self.graph_mixer is not None and hasattr(self, 'use_proper_gnn') and self.use_proper_gnn:
-                # Step 1: GNN processes input first
-                x_gnn = self.graph_mixer(x_re, is_train=self.is_train)  # [B, D] - GNN-processed representation
+                # Step 1: GNN processes input; optionally return per-expert states Y [B, N, H] for routing
+                use_per_expert_routing = getattr(self, 'goe_route_from_per_expert', False)
+                gnn_out = self.graph_mixer(x_re, is_train=self.is_train, return_per_expert=use_per_expert_routing)
+                if use_per_expert_routing:
+                    x_gnn, Y = gnn_out  # Y [B, N, H]
+                else:
+                    x_gnn = gnn_out
                 alpha = getattr(self, 'goe_residual_alpha', 0.0)
-                router_input = (1.0 - alpha) * x_gnn + alpha * x_re if alpha > 0 else x_gnn
                 
-                # Step 2: Router uses GNN output (optionally blended with CLS) to select experts
-                gates, load, full_gates = self.noisy_top_k_gating(
-                    router_input,
-                    self.is_train, 
-                    self.router_list[global_taskid],
-                    self.w_noise_list[global_taskid],
-                    top_k_override=effective_top_k
-                )
+                # Step 2: Router — per-expert logits from Y, or pooled x_gnn @ W_gate
+                if use_per_expert_routing and hasattr(self, 'goe_router_w_list'):
+                    # Z[b,i] = Y[b,i] @ goe_router_w[i]; logits [B, N]
+                    W_goe = self.goe_router_w_list[global_taskid].to(Y.device)
+                    Z = torch.einsum('bnh,nh->bn', Y, W_goe)
+                    gates, load, full_gates = self.noisy_top_k_gating_from_logits(
+                        Z, self.is_train, x_re, self.w_noise_list[global_taskid],
+                        top_k_override=effective_top_k
+                    )
+                else:
+                    router_input = (1.0 - alpha) * x_gnn + alpha * x_re if alpha > 0 else x_gnn
+                    gates, load, full_gates = self.noisy_top_k_gating(
+                        router_input, self.is_train,
+                        self.router_list[global_taskid], self.w_noise_list[global_taskid],
+                        top_k_override=effective_top_k
+                    )
                 
-                # Step 3: Experts process GNN output (optionally blended with original x for baseline stability)
-                x_gnn_seq = x_gnn.unsqueeze(1).expand(-1, x.shape[0], -1)  # [B, L, D]
-                x_gnn_seq = x_gnn_seq.permute(1, 0, 2)  # [L, B, D] to match x format
-                if alpha > 0:
-                    x_gnn_seq = (1.0 - alpha) * x_gnn_seq + alpha * x
+                # Step 3: Experts on original sequence x (token-level) or on broadcast x_gnn (legacy)
+                experts_on_x = getattr(self, 'goe_experts_on_x', True)
+                if experts_on_x:
+                    expert_seq = x
+                else:
+                    x_gnn_seq = x_gnn.unsqueeze(1).expand(-1, x.shape[0], -1).permute(1, 0, 2)
+                    if alpha > 0:
+                        x_gnn_seq = (1.0 - alpha) * x_gnn_seq + alpha * x
+                    expert_seq = x_gnn_seq
                 
                 dispatcher = SparseDispatcher(self.experts_num, gates)
-                expert_inputs = dispatcher.dispatch(x_gnn_seq.permute(1, 0, 2).reshape(x_gnn_seq.shape[1], -1))
+                expert_inputs = dispatcher.dispatch(expert_seq.permute(1, 0, 2).reshape(expert_seq.shape[1], -1))
                 expert_outputs = [self.adaptmlp_list[i](expert_inputs[i].view(expert_inputs[i].shape[0],
-                                                                              x_gnn_seq.shape[0], x_gnn_seq.shape[2]).to(x_gnn_seq), add_residual=False)
+                                                                              expert_seq.shape[0], expert_seq.shape[2]).to(expert_seq), add_residual=False)
                                   for i in range(self.experts_num)]
                 
                 i = 0

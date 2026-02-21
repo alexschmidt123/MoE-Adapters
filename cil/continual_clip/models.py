@@ -20,6 +20,24 @@ import random
 from .dynamic_dataset import DynamicDataset
 
 
+def _freeze_gnn_path(model):
+    """Freeze all graph_mixer parameters in the vision transformer (GoE drift control)."""
+    if not hasattr(model, "visual") or model.visual is None:
+        return
+    vis = model.visual
+    if not hasattr(vis, "transformer") or vis.transformer is None:
+        return
+    any_frozen = False
+    for block in vis.transformer.resblocks:
+        if hasattr(block, "graph_mixer") and block.graph_mixer is not None:
+            for p in block.graph_mixer.parameters():
+                if p.requires_grad:
+                    any_frozen = True
+                p.requires_grad = False
+    if any_frozen:
+        print("GoE: GNN path frozen (goe_freeze_gnn_after_task).")
+
+
 class ClassIncremental(nn.Module):
     def __init__(self, cfg, device, jit=False):
         super().__init__()
@@ -80,6 +98,10 @@ class ClassIncremental(nn.Module):
 
         if cfg.method != "zeroshot":
             self.train(task_id, cfg, train_dataset, train_classes_names)
+            # Optional: freeze GNN path after a given task to reduce router-input drift (GoE)
+            freeze_after = getattr(getattr(cfg, "model", None), "goe_freeze_gnn_after_task", -1)
+            if isinstance(freeze_after, (int, float)) and task_id >= int(freeze_after) and freeze_after >= 0:
+                _freeze_gnn_path(self.model)
 
     def train(self, task_id, cfg, train_dataset, train_classes_names):
         ### laoding dataset
