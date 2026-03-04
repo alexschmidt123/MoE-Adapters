@@ -1,38 +1,18 @@
 #!/bin/bash
-# Run 28 configs (1 baseline + 27 GoE grid), 3 runs each; then generate summary.csv.
-# Same configs as run_test.py. Configs: configs/class/02052026_uneven_cifar100/*.yaml.
-# For Windows use run_test.py (pathlib, forward slashes). Run from cil/.
+# Run L1 configs only (9 in 03032025_uneven_cifar100/), 3 runs each; then generate summary.csv.
+# Same configs as run_test.py. For Windows use run_test.py. Run from cil/.
 
 CONFIG_PATH="configs/class"
 CONFIG_NAMES=(
-    "02052026_uneven_cifar100/baseline"
-    "02052026_uneven_cifar100/GoE-L1-H512-HeadNone"
-    "02052026_uneven_cifar100/GoE-L1-H512-Head512"
-    "02052026_uneven_cifar100/GoE-L1-H512-Head512_256"
-    "02052026_uneven_cifar100/GoE-L1-H768-HeadNone"
-    "02052026_uneven_cifar100/GoE-L1-H768-Head512"
-    "02052026_uneven_cifar100/GoE-L1-H768-Head512_256"
-    "02052026_uneven_cifar100/GoE-L1-H1024-HeadNone"
-    "02052026_uneven_cifar100/GoE-L1-H1024-Head512"
-    "02052026_uneven_cifar100/GoE-L1-H1024-Head512_256"
-    "02052026_uneven_cifar100/GoE-L2-H512-HeadNone"
-    "02052026_uneven_cifar100/GoE-L2-H512-Head512"
-    "02052026_uneven_cifar100/GoE-L2-H512-Head512_256"
-    "02052026_uneven_cifar100/GoE-L2-H768-HeadNone"
-    "02052026_uneven_cifar100/GoE-L2-H768-Head512"
-    "02052026_uneven_cifar100/GoE-L2-H768-Head512_256"
-    "02052026_uneven_cifar100/GoE-L2-H1024-HeadNone"
-    "02052026_uneven_cifar100/GoE-L2-H1024-Head512"
-    "02052026_uneven_cifar100/GoE-L2-H1024-Head512_256"
-    "02052026_uneven_cifar100/GoE-L3-H512-HeadNone"
-    "02052026_uneven_cifar100/GoE-L3-H512-Head512"
-    "02052026_uneven_cifar100/GoE-L3-H512-Head512_256"
-    "02052026_uneven_cifar100/GoE-L3-H768-HeadNone"
-    "02052026_uneven_cifar100/GoE-L3-H768-Head512"
-    "02052026_uneven_cifar100/GoE-L3-H768-Head512_256"
-    "02052026_uneven_cifar100/GoE-L3-H1024-HeadNone"
-    "02052026_uneven_cifar100/GoE-L3-H1024-Head512"
-    "02052026_uneven_cifar100/GoE-L3-H1024-Head512_256"
+    "03032025_uneven_cifar100/GoE-L1-H512-HeadNone"
+    "03032025_uneven_cifar100/GoE-L1-H512-Head512"
+    "03032025_uneven_cifar100/GoE-L1-H512-Head512_256"
+    "03032025_uneven_cifar100/GoE-L1-H768-HeadNone"
+    "03032025_uneven_cifar100/GoE-L1-H768-Head512"
+    "03032025_uneven_cifar100/GoE-L1-H768-Head512_256"
+    "03032025_uneven_cifar100/GoE-L1-H1024-HeadNone"
+    "03032025_uneven_cifar100/GoE-L1-H1024-Head512"
+    "03032025_uneven_cifar100/GoE-L1-H1024-Head512_256"
 )
 NUM_RUNS=3
 
@@ -45,7 +25,7 @@ NC='\033[0m'
 # Timestamp format: mmddyyyy-HHMMSS
 RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
 echo "=========================================="
-echo "28 configs x $NUM_RUNS runs = $((${#CONFIG_NAMES[@]} * NUM_RUNS)) total"
+echo "${#CONFIG_NAMES[@]} configs x $NUM_RUNS runs = $((${#CONFIG_NAMES[@]} * NUM_RUNS)) total"
 echo "=========================================="
 echo "Results: experiments/${RUN_START_TIMESTAMP}/"
 echo "=========================================="

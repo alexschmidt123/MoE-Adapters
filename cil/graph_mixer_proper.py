@@ -73,6 +73,8 @@ class ProperGraphExpertMixer(nn.Module):
         graph_head_layers: Optional[List[int]] = None,
         graph_proto_layers: Optional[List[int]] = None,
         graph_proj_layers: Optional[List[int]] = None,
+        identity_bias_alpha: float = 0.0,
+        adj_top_m: Optional[int] = None,
     ):
         super().__init__()
         self.d_model = d_model
@@ -82,6 +84,10 @@ class ProperGraphExpertMixer(nn.Module):
         self.symmetrize = symmetrize
         self.add_self_loop = add_self_loop
         self.residual = residual
+        # Change B: identity-biased adjacency A = alpha*I + (1-alpha)*softmax(...); alpha 1 = no mixing
+        self.identity_bias_alpha = float(identity_bias_alpha)
+        # Change J: sparsify adjacency to top-m edges per node (None = dense)
+        self.adj_top_m = adj_top_m
         
         # Node feature embeddings (one per expert)
         # These represent expert-specific features
@@ -165,7 +171,20 @@ class ProperGraphExpertMixer(nn.Module):
             eye = torch.eye(N, device=A_logits.device, dtype=A_logits.dtype)
             A_logits = A_logits + eye.unsqueeze(0)
         A = F.softmax(A_logits, dim=-1)  # row-stochastic
-        
+
+        # Change J: keep only top-m edges per node, renormalize (less oversmoothing)
+        if self.adj_top_m is not None and self.adj_top_m < N:
+            m = min(self.adj_top_m, N)
+            top_vals, top_idx = A.topk(m, dim=-1)
+            A_sparse = torch.zeros_like(A)
+            A_sparse.scatter_(-1, top_idx, top_vals)
+            A = A_sparse / (A_sparse.sum(dim=-1, keepdim=True).clamp_min(1e-9))
+
+        # Change B: identity-biased A = alpha*I + (1-alpha)*A (avoid harmful mixing early)
+        if self.identity_bias_alpha > 0:
+            eye = torch.eye(N, device=A.device, dtype=A.dtype).unsqueeze(0).expand(B, -1, -1)
+            A = self.identity_bias_alpha * eye + (1.0 - self.identity_bias_alpha) * A
+
         # 3. Multi-layer message passing
         Y = node_features  # [B, N, hidden_dim]
         for i, gnn_layer in enumerate(self.gnn_layers):

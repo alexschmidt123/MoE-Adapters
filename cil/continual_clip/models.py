@@ -126,22 +126,29 @@ class ClassIncremental(nn.Module):
             if "adaptmlp" not in k and "router" not in k and "noise" not in k and "graph_mixer" not in k and "alpha_graph" not in k:
                 v.requires_grad = False
 
+        # Change D: optional separate LRs for experts (plastic), GNN (stable), router (medium)
+        lr_experts = getattr(cfg, 'lr_experts', None)
+        lr_gnn = getattr(cfg, 'lr_gnn', None)
+        lr_router = getattr(cfg, 'lr_router', None)
+        use_split_lr = (lr_experts is not None and lr_gnn is not None and lr_router is not None)
 
-        params = [
-            v for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k or "graph_mixer" in k or "alpha_graph" in k
-        ]
-        params_name = [
-            k for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k or "graph_mixer" in k or "alpha_graph" in k
-        ]
-        # print('========trainable params============', params_name)
-
-        logit_scale = self.model.logit_scale
-
-        # optimizer
-        optimizer = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
-        scheduler = utils.cosine_lr(
-            optimizer, cfg.lr, 30, total_iterations
-        )
+        if use_split_lr:
+            params_experts = [v for k, v in self.model.named_parameters() if v.requires_grad and "adaptmlp" in k]
+            params_gnn = [v for k, v in self.model.named_parameters() if v.requires_grad and "graph_mixer" in k]
+            params_router = [v for k, v in self.model.named_parameters() if v.requires_grad and ("router" in k or "noise" in k)]
+            param_groups = [{"params": params_experts, "lr": lr_experts}, {"params": params_router, "lr": lr_router}]
+            base_lrs = [lr_experts, lr_router]
+            if params_gnn:
+                param_groups.insert(1, {"params": params_gnn, "lr": lr_gnn})
+                base_lrs.insert(1, lr_gnn)
+            optimizer = torch.optim.AdamW(param_groups, weight_decay=cfg.weight_decay)
+            scheduler = utils.cosine_lr(optimizer, base_lrs, 30, total_iterations)
+        else:
+            params = [
+                v for k, v in self.model.named_parameters() if "adaptmlp" in k or "router" in k or "noise" in k or "graph_mixer" in k or "alpha_graph" in k
+            ]
+            optimizer = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+            scheduler = utils.cosine_lr(optimizer, cfg.lr, 30, total_iterations)
 
         # move model to device
         self.model = self.model.cuda()

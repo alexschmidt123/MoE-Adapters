@@ -434,8 +434,10 @@ class ResidualAttentionBlock(nn.Module):
                 self.hmoe_balanced_activation_weight = 0.0
                 self.hmoe_gate_entropy_weight = 0.0
                 self.hmoe_load_balance_weight = 0.0
-            # Load balance for standard MoE/GoE (when not HMoE); improves stability
+            # Load balance for standard MoE/GoE (when not HMoE); improves stability (Change F)
             self.moe_load_balance_weight = float(getattr(cfg.model, 'moe_load_balance_weight', 0.0))
+            # Router z-loss: logit magnitude regularizer for stable routing (Change G)
+            self.moe_router_z_loss_weight = float(getattr(cfg.model, 'moe_router_z_loss_weight', 0.0))
             # Task-adaptive top_k: heavier task (more classes) -> use more experts (for uneven splits)
             self.task_adaptive_top_k_step = int(getattr(cfg.model, 'task_adaptive_top_k_step', 5))  # +1 expert per this many extra classes
             self.task_adaptive_top_k_base = int(getattr(cfg.model, 'task_adaptive_top_k_base', 10))  # baseline num_classes for scaling
@@ -449,6 +451,7 @@ class ResidualAttentionBlock(nn.Module):
             self.hmoe_gate_entropy_weight = 0.0
             self.hmoe_load_balance_weight = 0.0
             self.moe_load_balance_weight = 0.0
+            self.moe_router_z_loss_weight = 0.0
             self.task_adaptive_top_k_step = 5
             self.task_adaptive_top_k_base = 10
         # Default bottleneck size (used for homogeneous experts or as fallback)
@@ -515,6 +518,8 @@ class ResidualAttentionBlock(nn.Module):
                     graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
                     graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
                     graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
+                    identity_bias_alpha=float(getattr(cfg.model, 'graph_identity_bias_alpha', 0.0)),
+                    adj_top_m=getattr(cfg.model, 'graph_adj_top_m', None),
                 )
                 self.use_proper_gnn = True
                 # Per-expert routing: logits Z[b,i] from Y[b,i] via goe_router_w [N, H] per task
@@ -527,7 +532,9 @@ class ResidualAttentionBlock(nn.Module):
                 self.goe_experts_on_x = bool(getattr(cfg.model, 'goe_experts_on_x', True))
                 self.goe_route_from_per_expert = bool(getattr(cfg.model, 'goe_route_from_per_expert', True))
                 self.goe_freeze_gnn_after_task = int(getattr(cfg.model, 'goe_freeze_gnn_after_task', -1))
-                print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}")
+                # Residual logits: Z = Z_base + lambda * Z_graph (baseline-safe early, graph helps later)
+                self.goe_residual_lambda = float(getattr(cfg.model, 'goe_residual_lambda', 1.0))  # 0 = baseline only, 1 = graph only
+                print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}, residual_lambda={self.goe_residual_lambda}")
                 self.alpha_graph = None
                 self.graph_entropy_weight = 0.0
             else:
@@ -755,9 +762,18 @@ class ResidualAttentionBlock(nn.Module):
                 
                 # Step 2: Router — per-expert logits from Y, or pooled x_gnn @ W_gate
                 if use_per_expert_routing and hasattr(self, 'goe_router_w_list'):
-                    # Z[b,i] = Y[b,i] @ goe_router_w[i]; logits [B, N]
+                    # Z_graph[b,i] = Y[b,i] @ goe_router_w[i]
                     W_goe = self.goe_router_w_list[global_taskid].to(Y.device)
-                    Z = torch.einsum('bnh,nh->bn', Y, W_goe)
+                    Z_graph = torch.einsum('bnh,nh->bn', Y, W_goe)
+                    # Residual logits (Change A): Z = Z_base + lambda * Z_graph for baseline-safe early learning
+                    lam = getattr(self, 'goe_residual_lambda', 1.0)
+                    if lam < 1.0:
+                        Z_base = x_re @ self.router_list[global_taskid].to(x_re.device)
+                        Z = Z_base + lam * Z_graph
+                    else:
+                        Z = Z_graph
+                    if getattr(self, 'moe_router_z_loss_weight', 0) > 0 and self.is_train:
+                        self._last_router_logits = Z
                     gates, load, full_gates = self.noisy_top_k_gating_from_logits(
                         Z, self.is_train, x_re, self.w_noise_list[global_taskid],
                         top_k_override=effective_top_k
@@ -863,13 +879,23 @@ class ResidualAttentionBlock(nn.Module):
                         self.extra_losses = self.hmoe_load_balance_weight * load_balance_loss
                     else:
                         self.extra_losses = self.extra_losses + self.hmoe_load_balance_weight * load_balance_loss
-            # MoE/GoE load balance (when not HMoE): encourages uniform expert usage for stability
+            # MoE/GoE load balance (when not HMoE): encourages uniform expert usage for stability (Change F)
             elif getattr(self, 'moe_load_balance_weight', 0) > 0 and self.is_train:
                 load_balance_loss = self.cv_squared(importance) + self.cv_squared(load)
                 if self.extra_losses is None:
                     self.extra_losses = self.moe_load_balance_weight * load_balance_loss
                 else:
                     self.extra_losses = self.extra_losses + self.moe_load_balance_weight * load_balance_loss
+
+            # Router z-loss (Change G): logit magnitude regularizer for stable routing (optional)
+            if getattr(self, 'moe_router_z_loss_weight', 0) > 0 and self.is_train and getattr(self, '_last_router_logits', None) is not None:
+                Z_log = self._last_router_logits
+                z_loss = 0.5 * (torch.log1p(torch.exp(-torch.abs(Z_log))).pow(2)).mean()
+                if self.extra_losses is None:
+                    self.extra_losses = self.moe_router_z_loss_weight * z_loss
+                else:
+                    self.extra_losses = self.extra_losses + self.moe_router_z_loss_weight * z_loss
+                self._last_router_logits = None  # consume once per forward
             
             x = x + self.mlp(self.ln_2(x)) + y_output.permute(1, 0, 2)
         else:

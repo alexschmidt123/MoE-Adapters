@@ -13,37 +13,18 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# 28 configs in configs/class/02052026_uneven_cifar100/ (use group path so _archive defaults resolve)
+# L1 configs only, in 03032025_uneven_cifar100/ (self-contained, new options enabled). 9 configs.
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "02052026_uneven_cifar100/baseline",
-    "02052026_uneven_cifar100/GoE-L1-H512-HeadNone",
-    "02052026_uneven_cifar100/GoE-L1-H512-Head512",
-    "02052026_uneven_cifar100/GoE-L1-H512-Head512_256",
-    "02052026_uneven_cifar100/GoE-L1-H768-HeadNone",
-    "02052026_uneven_cifar100/GoE-L1-H768-Head512",
-    "02052026_uneven_cifar100/GoE-L1-H768-Head512_256",
-    "02052026_uneven_cifar100/GoE-L1-H1024-HeadNone",
-    "02052026_uneven_cifar100/GoE-L1-H1024-Head512",
-    "02052026_uneven_cifar100/GoE-L1-H1024-Head512_256",
-    "02052026_uneven_cifar100/GoE-L2-H512-HeadNone",
-    "02052026_uneven_cifar100/GoE-L2-H512-Head512",
-    "02052026_uneven_cifar100/GoE-L2-H512-Head512_256",
-    "02052026_uneven_cifar100/GoE-L2-H768-HeadNone",
-    "02052026_uneven_cifar100/GoE-L2-H768-Head512",
-    "02052026_uneven_cifar100/GoE-L2-H768-Head512_256",
-    "02052026_uneven_cifar100/GoE-L2-H1024-HeadNone",
-    "02052026_uneven_cifar100/GoE-L2-H1024-Head512",
-    "02052026_uneven_cifar100/GoE-L2-H1024-Head512_256",
-    "02052026_uneven_cifar100/GoE-L3-H512-HeadNone",
-    "02052026_uneven_cifar100/GoE-L3-H512-Head512",
-    "02052026_uneven_cifar100/GoE-L3-H512-Head512_256",
-    "02052026_uneven_cifar100/GoE-L3-H768-HeadNone",
-    "02052026_uneven_cifar100/GoE-L3-H768-Head512",
-    "02052026_uneven_cifar100/GoE-L3-H768-Head512_256",
-    "02052026_uneven_cifar100/GoE-L3-H1024-HeadNone",
-    "02052026_uneven_cifar100/GoE-L3-H1024-Head512",
-    "02052026_uneven_cifar100/GoE-L3-H1024-Head512_256",
+    "03032025_uneven_cifar100/GoE-L1-H512-HeadNone",
+    "03032025_uneven_cifar100/GoE-L1-H512-Head512",
+    "03032025_uneven_cifar100/GoE-L1-H512-Head512_256",
+    "03032025_uneven_cifar100/GoE-L1-H768-HeadNone",
+    "03032025_uneven_cifar100/GoE-L1-H768-Head512",
+    "03032025_uneven_cifar100/GoE-L1-H768-Head512_256",
+    "03032025_uneven_cifar100/GoE-L1-H1024-HeadNone",
+    "03032025_uneven_cifar100/GoE-L1-H1024-Head512",
+    "03032025_uneven_cifar100/GoE-L1-H1024-Head512_256",
 ]
 NUM_RUNS = 3
 
@@ -121,7 +102,7 @@ def main():
     completed_runs = []
 
     print("==========================================")
-    print(f"28 configs x {NUM_RUNS} runs = {len(CONFIG_NAMES) * NUM_RUNS} total")
+    print(f"{len(CONFIG_NAMES)} configs x {NUM_RUNS} runs = {len(CONFIG_NAMES) * NUM_RUNS} total")
     print("==========================================")
     print(f"Results: {path_for_hydra(results_dir)}")
     print("==========================================")
