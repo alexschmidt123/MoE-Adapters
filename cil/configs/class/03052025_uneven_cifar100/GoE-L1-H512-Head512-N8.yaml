@@ -1,5 +1,4 @@
-# 03032025: GoE L1-H512-Head512, self-contained. New options enabled.
-# Run: --config-name 03032025_uneven_cifar100/GoE-L1-H512-Head512
+# 03052025: GoE L1-H512-Head512, N=8. Run: --config-name 03052025_uneven_cifar100/GoE-L1-H512-Head512-N8
 
 hydra:
   run:
@@ -22,7 +21,7 @@ prompt_template: "a bad photo of a {}."
 batch_size: 32
 scenario: "class"
 dataset: "cifar100"
-task_sizes: [46, 2, 2, 20, 20, 2, 2, 2, 2, 2]
+task_sizes: [56, 14, 8, 6, 4, 3, 3, 2, 2, 2]
 increment: 10
 initial_increment: 10
 

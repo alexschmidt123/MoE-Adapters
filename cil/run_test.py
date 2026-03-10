@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Run 28 configs (1 baseline + 27 GoE grid), 3 times each; then generate summary.csv.
-Windows-friendly: pathlib, forward slashes for Hydra, no reliance on os.path for joins.
+Run L1_512 uneven configs only (6 configs: 3 N8 + 3 N16), 3 times each; then generate summary.csv.
+Configs live in configs/class/03052025_uneven_cifar100/. Windows-friendly.
 """
 import csv
 import json
@@ -13,18 +13,15 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# L1 configs only, in 03032025_uneven_cifar100/ (self-contained, new options enabled). 9 configs.
+# L1_512 uneven only: configs in 03052025_uneven_cifar100/ (N=8 and N=16, 3 heads each). 6 configs.
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "03032025_uneven_cifar100/GoE-L1-H512-HeadNone",
-    "03032025_uneven_cifar100/GoE-L1-H512-Head512",
-    "03032025_uneven_cifar100/GoE-L1-H512-Head512_256",
-    "03032025_uneven_cifar100/GoE-L1-H768-HeadNone",
-    "03032025_uneven_cifar100/GoE-L1-H768-Head512",
-    "03032025_uneven_cifar100/GoE-L1-H768-Head512_256",
-    "03032025_uneven_cifar100/GoE-L1-H1024-HeadNone",
-    "03032025_uneven_cifar100/GoE-L1-H1024-Head512",
-    "03032025_uneven_cifar100/GoE-L1-H1024-Head512_256",
+    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N8",
+    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N8",
+    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N8",
+    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N16",
+    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N16",
+    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N16",
 ]
 NUM_RUNS = 3
 
