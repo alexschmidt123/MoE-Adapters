@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Run L1_512 uneven configs only (6 configs: 3 N8 + 3 N16), 3 times each; then generate summary.csv.
-Configs live in configs/class/03052025_uneven_cifar100/. Windows-friendly.
+Run all 8 configs in 03122026_uneven_cifar100 (2 baselines + 6 GoE), 3 times each; then generate summary.csv.
+Windows-friendly.
 """
 import csv
 import json
@@ -13,15 +13,17 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# L1_512 uneven only: configs in 03052025_uneven_cifar100/ (N=8 and N=16, 3 heads each). 6 configs.
+# All 8 configs in 03122026_uneven_cifar100 (same task_sizes: more random uneven split).
 CONFIG_PATH = "configs/class"
 CONFIG_NAMES = [
-    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N8",
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N8",
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N8",
-    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N16",
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N16",
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N16",
+    "03122026_uneven_cifar100/MoE-N8",
+    "03122026_uneven_cifar100/MoE-N16",
+    "03122026_uneven_cifar100/GoE-L1-H512-HeadNone-N8",
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512-N8",
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512_256-N8",
+    "03122026_uneven_cifar100/GoE-L1-H512-HeadNone-N16",
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512-N16",
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512_256-N16",
 ]
 NUM_RUNS = 3
 

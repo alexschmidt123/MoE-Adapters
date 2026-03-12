@@ -1,15 +1,17 @@
 #!/bin/bash
-# Run L1_512 uneven configs only (6 in 03052025_uneven_cifar100/), 3 runs each; then generate summary.csv.
+# Run all 8 configs in 03122026_uneven_cifar100, 3 runs each; then generate summary.csv.
 # Same configs as run_test.py. For Windows use run_test.py. Run from cil/.
 
 CONFIG_PATH="configs/class"
 CONFIG_NAMES=(
-    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N8"
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N8"
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N8"
-    "03052025_uneven_cifar100/GoE-L1-H512-HeadNone-N16"
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512-N16"
-    "03052025_uneven_cifar100/GoE-L1-H512-Head512_256-N16"
+    "03122026_uneven_cifar100/MoE-N8"
+    "03122026_uneven_cifar100/MoE-N16"
+    "03122026_uneven_cifar100/GoE-L1-H512-HeadNone-N8"
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512-N8"
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512_256-N8"
+    "03122026_uneven_cifar100/GoE-L1-H512-HeadNone-N16"
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512-N16"
+    "03122026_uneven_cifar100/GoE-L1-H512-Head512_256-N16"
 )
 NUM_RUNS=3
 
