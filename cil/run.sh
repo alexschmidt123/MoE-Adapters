@@ -39,6 +39,7 @@ if [ -n "$DIRECTORY" ]; then
     fi
     RUN_START_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
     export HYDRARUN_PARENT_DIR="$RUN_START_TIMESTAMP"
+    export HYDRARUN_SKIP_SUMMARY=1
     CONFIGS=()
     for f in "$DIR_FULL"/*.yaml; do
         [ -f "$f" ] && CONFIGS+=("$f")
@@ -54,12 +55,17 @@ if [ -n "$DIRECTORY" ]; then
     echo "=========================================="
     for CONFIG_FILE in "${CONFIGS[@]}"; do
         for run in $(seq 1 "$NUM_RUNS"); do
+            export HYDRARUN_RUN_INDEX="$run"
             echo ""
             bash "$SCRIPT_DIR/run.sh" "$CONFIG_FILE"
         done
     done
+    unset HYDRARUN_RUN_INDEX
+    unset HYDRARUN_SKIP_SUMMARY
+    python "$SCRIPT_DIR/generate_run_summary.py" "experiments/${RUN_START_TIMESTAMP}"
     echo "=========================================="
     echo "Done. Results: experiments/${RUN_START_TIMESTAMP}/"
+    echo "CSV: experiments/${RUN_START_TIMESTAMP}/summary.csv"
     echo "=========================================="
     exit 0
 fi
@@ -128,7 +134,8 @@ echo "=========================================="
 SAFE_CONFIG_NAME="${CONFIG_NAME//\//_}"
 RUN_START_TIMESTAMP="${HYDRARUN_PARENT_DIR:-$(date +"%m%d%Y-%H%M%S")}"
 EXP_TIMESTAMP=$(date +"%m%d%Y-%H%M%S")
-echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/${SAFE_CONFIG_NAME}-${EXP_TIMESTAMP}/"
+RUN_INDEX="${HYDRARUN_RUN_INDEX:-1}"
+echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/${SAFE_CONFIG_NAME}-run${RUN_INDEX}-${EXP_TIMESTAMP}/"
 echo ""
 
 # Build command with optional epoch override and new save path (--config-name is name without .yaml)
@@ -136,7 +143,7 @@ echo ""
 CMD="CUDA_VISIBLE_DEVICES=0 python main.py \
     --config-path \"$CONFIG_PATH\" \
     --config-name \"$CONFIG_NAME\" \
-    hydra.run.dir=\"experiments/${RUN_START_TIMESTAMP}/${SAFE_CONFIG_NAME}-${EXP_TIMESTAMP}\""
+    hydra.run.dir=\"experiments/${RUN_START_TIMESTAMP}/${SAFE_CONFIG_NAME}-run${RUN_INDEX}-${EXP_TIMESTAMP}\""
 
 # Add epoch override if provided
 if [ "$2" != "" ]; then
@@ -145,6 +152,11 @@ fi
 
 # Run the experiment
 eval $CMD
+
+# In single-config mode, write summary.csv for this run directory
+if [ -z "$HYDRARUN_SKIP_SUMMARY" ]; then
+    python "$SCRIPT_DIR/generate_run_summary.py" "experiments/${RUN_START_TIMESTAMP}"
+fi
 
 echo "=========================================="
 echo "Experiment completed: $CONFIG_NAME"
