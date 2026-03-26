@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 import numpy as np
 import torch.nn as nn
 
@@ -11,6 +13,44 @@ from continuum.datasets import (
 )
 from .utils import get_dataset_class_names
 from .uneven_scenario import UnevenClassIncremental
+
+
+def _ensure_imagenet_subset_assets(workdir: str, subset_size: str) -> None:
+    """
+    Ensure class order and split files exist for imagenet{subset_size}.
+    Auto-generates by invoking scripts/prepare_imagenet_subsets.py when missing.
+    """
+    cil_dir = os.path.dirname(os.path.dirname(__file__))
+    reqs_dir = os.path.join(cil_dir, "dataset_reqs")
+    class_order_path = os.path.join(cil_dir, "class_orders", f"imagenet{subset_size}.yaml")
+    split_dir = os.path.join(reqs_dir, f"imagenet{subset_size}_splits")
+    train_split = os.path.join(split_dir, f"train_{subset_size}.txt")
+    val_split = os.path.join(split_dir, f"val_{subset_size}.txt")
+
+    need_class_order = not os.path.exists(class_order_path)
+    need_splits = not (os.path.exists(train_split) and os.path.exists(val_split))
+    if not (need_class_order or need_splits):
+        return
+
+    script_path = os.path.join(cil_dir, "scripts", "prepare_imagenet_subsets.py")
+    imagenet_root = os.path.join(workdir, "datasets", "ImageNet")
+    train_root = os.path.join(imagenet_root, "train")
+    val_root = os.path.join(imagenet_root, "val")
+    has_imagenet_data = os.path.isdir(train_root) and os.path.isdir(val_root)
+
+    # Always try to create class_order/classes; create splits only if ImageNet train/val is present.
+    cmd = [sys.executable, script_path, "--dataset-root", "../datasets/ImageNet", "--sizes", subset_size]
+    if not has_imagenet_data:
+        cmd.append("--skip-splits")
+    subprocess.run(cmd, cwd=cil_dir, check=False)
+
+    # For runtime training, split files are required.
+    if not (os.path.exists(train_split) and os.path.exists(val_split)):
+        raise FileNotFoundError(
+            f"Missing ImageNet subset split files for imagenet{subset_size}: "
+            f"{train_split} / {val_split}. "
+            "Expected ImageNet data layout at datasets/ImageNet/train and datasets/ImageNet/val."
+        )
 
 
 class Food101Raw(ImageFolderDataset):
@@ -108,11 +148,17 @@ def get_dataset(cfg, is_train, transforms=None):
         )
         classes_names = get_dataset_class_names(cfg.workdir, cfg.dataset)
         
-    elif cfg.dataset == "imagenet100":
+    elif cfg.dataset in {"imagenet100", "imagenet200", "imagenet500"}:
         data_path = os.path.join(cfg.dataset_root, "ImageNet")
         # Use relative path from the cil directory
         dataset_reqs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dataset_reqs")
-        subset_file = os.path.join(dataset_reqs_dir, "imagenet100_splits", "train_100.txt" if is_train else "val_100.txt")
+        subset_size = cfg.dataset.replace("imagenet", "")
+        _ensure_imagenet_subset_assets(cfg.workdir, subset_size)
+        subset_file = os.path.join(
+            dataset_reqs_dir,
+            f"imagenet{subset_size}_splits",
+            f"{'train' if is_train else 'val'}_{subset_size}.txt",
+        )
         dataset = ImageNet100(
             data_path, 
             train=is_train,

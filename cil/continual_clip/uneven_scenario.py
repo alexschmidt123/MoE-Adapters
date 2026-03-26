@@ -77,6 +77,13 @@ class UnevenClassIncremental:
                 "Single-class tasks are not allowed."
             )
         x, y, t_old = dataset.get_data()
+        # Tiny ImageNet (200 classes in Continuum) may use a subset class_order (e.g. 100 IDs).
+        # Keep only samples whose label is in the incremental class list.
+        allowed = set(int(c) for c in self.class_order)
+        mask = np.array([int(yi) in allowed for yi in y], dtype=bool)
+        if not np.all(mask):
+            x = x[mask]
+            y = y[mask]
         # Map class_id -> task_id: class_order[pos] belongs to task_id where pos in [start, start+size)
         class_to_task = {}
         start = 0

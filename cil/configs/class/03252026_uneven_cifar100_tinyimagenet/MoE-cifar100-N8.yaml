@@ -1,0 +1,40 @@
+# 03252026: MoE N8 only (no GNN), cifar100 baseline. Run: --config-name 03252026_uneven_cifar100_tinyimagenet/MoE-cifar100-N8
+
+hydra:
+  run:
+    dir: ./experiments/${scenario}/${config_name_no_ext:}-${now:%m%d%Y-%H%M%S}
+  job:
+    chdir: true
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '%(message)s'
+
+class_order: "class_orders/cifar100.yaml"
+dataset_root: "../datasets"
+workdir: ""
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+prompt_template: "a bad photo of a {}."
+
+batch_size: 32
+scenario: "class"
+dataset: "cifar100"
+task_sizes: [46, 2, 2, 20, 20, 2, 2, 2, 2, 2]
+increment: 10
+initial_increment: 10
+
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+method: "MoE-Adapters-N8"
+lr: 1e-3
+ls: 0.0
+epochs: 15
+
+model:
+  num_experts: 8
+  top_k: 2
+  graph_mixer_enabled: false
+  moe_load_balance_weight: 0.01
