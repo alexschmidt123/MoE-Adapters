@@ -42,7 +42,12 @@ def _ensure_imagenet_subset_assets(workdir: str, subset_size: str) -> None:
     cmd = [sys.executable, script_path, "--dataset-root", "../datasets/ImageNet", "--sizes", subset_size]
     if not has_imagenet_data:
         cmd.append("--skip-splits")
-    subprocess.run(cmd, cwd=cil_dir, check=False)
+    result = subprocess.run(cmd, cwd=cil_dir, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "prepare_imagenet_subsets.py failed:\n"
+            + (result.stderr or result.stdout or "(no output)")
+        )
 
     # For runtime training, split files are required.
     if not (os.path.exists(train_split) and os.path.exists(val_split)):
@@ -176,7 +181,7 @@ def get_dataset(cfg, is_train, transforms=None):
 
     elif cfg.dataset == "core50":
         data_path = os.path.join(cfg.dataset_root, cfg.dataset)
-        dataset = dataset = Core50(
+        dataset = Core50(
             data_path, 
             scenario="domains", 
             classification="category", 
@@ -229,10 +234,12 @@ def build_cl_scenarios(cfg, is_train, transforms) -> nn.Module:
         )
 
     elif cfg.scenario == "task-agnostic":
-        NotImplementedError("Method has not been implemented. Soon be added.")
+        raise NotImplementedError("Method has not been implemented. Soon be added.")
 
     else:
-        ValueError(f"You have entered `{cfg.scenario}` which is not a defined scenario, " 
-                    "please choose from {{'class', 'domain', 'task-agnostic'}}.")
+        raise ValueError(
+            f"You have entered `{cfg.scenario}` which is not a defined scenario, "
+            "please choose from {{'class', 'domain', 'task-agnostic'}}."
+        )
 
     return scenario, classes_names

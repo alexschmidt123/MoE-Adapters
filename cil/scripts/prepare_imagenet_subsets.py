@@ -7,6 +7,9 @@ Outputs:
 - class_orders/imagenet{N}.yaml
 - dataset_reqs/imagenet{N}_splits/train_{N}.txt
 - dataset_reqs/imagenet{N}_splits/val_{N}.txt
+
+``imagenet1000_classes.txt`` may omit the synset column (idx + tab + human name only); then
+``dataset_reqs/imagenet1000_synsets.txt`` must list 1000 WordNet IDs in class-index order (0..999).
 """
 
 from __future__ import annotations
@@ -16,12 +19,30 @@ from pathlib import Path
 import yaml
 
 
-def load_imagenet1000_classes(path: Path):
-    rows = []
+def load_imagenet1000_classes(path: Path, synsets_path: Path) -> list[tuple[int, str, str]]:
+    """Load 1000-class table. Supports ``idx\\tsynset\\tname`` or ``idx\\tname`` (synsets from *synsets_path*)."""
+    wnids: list[str] | None = None
+    if synsets_path.exists():
+        wnids = [ln.strip() for ln in synsets_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        if len(wnids) != 1000:
+            wnids = None
+    rows: list[tuple[int, str, str]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        idx_str, synset, name = line.split("\t", 2)
+        parts = line.split("\t", 2)
+        if len(parts) >= 3:
+            idx_str, synset, name = parts[0], parts[1], parts[2]
+        elif len(parts) == 2:
+            idx_str, name = parts[0], parts[1]
+            idx = int(idx_str)
+            if wnids is None:
+                raise ValueError(
+                    f"Two-column format in {path} requires {synsets_path} with exactly 1000 WordNet IDs (one per line)."
+                )
+            synset = wnids[idx]
+        else:
+            raise ValueError(f"Unrecognized line in {path}: {line!r}")
         rows.append((int(idx_str), synset, name))
     rows.sort(key=lambda x: x[0])
     return rows
@@ -91,7 +112,10 @@ def main():
     orders_dir = cil_dir / "class_orders"
     image_root = (cil_dir / args.dataset_root).resolve()
 
-    classes1000 = load_imagenet1000_classes(reqs_dir / "imagenet1000_classes.txt")
+    classes1000 = load_imagenet1000_classes(
+        reqs_dir / "imagenet1000_classes.txt",
+        reqs_dir / "imagenet1000_synsets.txt",
+    )
     order1000 = load_order(orders_dir / "imagenet1000.yaml")
 
     for n in [int(x) for x in args.sizes.split(",") if x.strip()]:
