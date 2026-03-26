@@ -5,6 +5,10 @@ Windows-friendly runner with the same behavior as run.sh.
 Usage:
   python run.py <config_file_path> [epochs]
   python run.py -directory <folder> [-times B]
+
+Before each experiment, ImageNet-100/200/500 configs trigger
+``scripts/prepare_imagenet_subsets.ensure_imagenet_subsets_from_full_data()`` when full ImageNet
+is installed and subset assets are missing (see that module's docstring).
 """
 
 import argparse
@@ -18,6 +22,18 @@ from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH_BASE = Path("configs/class")
+
+# Ensure cil/ and scripts/ are importable.
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+_scripts = SCRIPT_DIR / "scripts"
+if str(_scripts) not in sys.path:
+    sys.path.insert(0, str(_scripts))
+
+from prepare_imagenet_subsets import (  # noqa: E402
+    config_needs_imagenet_subsets,
+    ensure_imagenet_subsets_from_full_data,
+)
 
 
 def to_hydra_path(path: Path) -> str:
@@ -115,6 +131,13 @@ def run_one(
     print("==========================================")
     print(f"Results will be saved to: {out_dir}/")
     print("")
+
+    if config_needs_imagenet_subsets(config_name):
+        try:
+            ensure_imagenet_subsets_from_full_data()
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            return 1
 
     cmd = [
         sys.executable,

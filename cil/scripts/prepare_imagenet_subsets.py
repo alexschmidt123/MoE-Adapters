@@ -2,11 +2,24 @@
 """
 Prepare reusable ImageNet subset assets for N in {100, 200, 500}.
 
-Outputs:
+Outputs (under ``cil/dataset_reqs/`` and ``cil/class_orders/``):
 - dataset_reqs/imagenet{N}_classes.txt
 - class_orders/imagenet{N}.yaml
 - dataset_reqs/imagenet{N}_splits/train_{N}.txt
 - dataset_reqs/imagenet{N}_splits/val_{N}.txt
+
+**Manual CLI:** ``python scripts/prepare_imagenet_subsets.py --dataset-root ../datasets/ImageNet --sizes 100,200,500``
+
+**Automatic (recommended):** ``run.py`` and ``run.sh`` call
+``config_needs_imagenet_subsets()`` + ``ensure_imagenet_subsets_from_full_data()`` before ``main.py``
+when the Hydra config *name* indicates ImageNet-100/200/500 (filename contains ``imagenet100``,
+``imagenet200``, or ``imagenet500``, but not ``imagenet1000``). If
+``<repo>/datasets/ImageNet/train`` and ``val`` exist and any shared 100/200/500 asset is missing,
+this script is run once with ``--sizes 100,200,500`` so all experiments reuse the same splits.
+If full ImageNet is not installed, the runners skip prep and existing repo split files are used.
+
+``continual_clip.datasets`` also invokes ``ensure_imagenet_subsets_from_full_data()`` when loading
+an ImageNet subset and full data is present.
 
 ``imagenet1000_classes.txt`` may omit the synset column (idx + tab + human name only); then
 ``dataset_reqs/imagenet1000_synsets.txt`` must list 1000 WordNet IDs in class-index order (0..999).
@@ -15,8 +28,91 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 from pathlib import Path
+
 import yaml
+
+# scripts/ -> cil/
+CIL_DIR = Path(__file__).resolve().parent.parent
+
+
+def imagenet_root() -> Path:
+    """Resolved path to ``<repo>/datasets/ImageNet`` (same as default ``--dataset-root``)."""
+    return (CIL_DIR.parent / "datasets" / "ImageNet").resolve()
+
+
+def _subset_asset_paths(n: int) -> tuple[Path, Path, Path, Path]:
+    reqs = CIL_DIR / "dataset_reqs"
+    orders = CIL_DIR / "class_orders"
+    s = str(n)
+    return (
+        orders / f"imagenet{s}.yaml",
+        reqs / f"imagenet{s}_classes.txt",
+        reqs / f"imagenet{s}_splits" / f"train_{s}.txt",
+        reqs / f"imagenet{s}_splits" / f"val_{s}.txt",
+    )
+
+
+def all_imagenet_subset_assets_ready() -> bool:
+    """True if class order, class list, and non-empty train/val splits exist for 100, 200, and 500."""
+    for n in (100, 200, 500):
+        y, c, tr, va = _subset_asset_paths(n)
+        if not y.is_file() or not c.is_file() or not tr.is_file() or not va.is_file():
+            return False
+        if tr.stat().st_size == 0 or va.stat().st_size == 0:
+            return False
+    return True
+
+
+def full_imagenet_installed() -> bool:
+    root = imagenet_root()
+    return (root / "train").is_dir() and (root / "val").is_dir()
+
+
+def config_needs_imagenet_subsets(config_name: str) -> bool:
+    """True for imagenet100/200/500 configs; false for imagenet1000 and others."""
+    n = config_name.lower()
+    if "imagenet1000" in n:
+        return False
+    return (
+        "imagenet100" in n
+        or "imagenet200" in n
+        or "imagenet500" in n
+    )
+
+
+def ensure_imagenet_subsets_from_full_data() -> None:
+    """
+    If ``datasets/ImageNet/train`` and ``val`` exist, run this script for sizes 100,200,500
+    when any subset assets are missing. No-op if data absent or all assets ready.
+    """
+    if not full_imagenet_installed():
+        return
+    if all_imagenet_subset_assets_ready():
+        return
+    script = CIL_DIR / "scripts" / "prepare_imagenet_subsets.py"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--dataset-root",
+        "../datasets/ImageNet",
+        "--sizes",
+        "100,200,500",
+    ]
+    print(
+        "[prepare_imagenet_subsets] Full ImageNet found; building shared 100/200/500 split lists "
+        f"under {CIL_DIR / 'dataset_reqs'} …"
+    )
+    result = subprocess.run(cmd, cwd=str(CIL_DIR), capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "prepare_imagenet_subsets.py failed:\n"
+            + (result.stderr or result.stdout or "(no output)")
+        )
+    if result.stdout.strip():
+        print(result.stdout.rstrip())
 
 
 def load_imagenet1000_classes(path: Path, synsets_path: Path) -> list[tuple[int, str, str]]:

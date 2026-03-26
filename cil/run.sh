@@ -138,6 +138,17 @@ RUN_INDEX="${HYDRARUN_RUN_INDEX:-1}"
 echo "Results will be saved to: experiments/${RUN_START_TIMESTAMP}/${SAFE_CONFIG_NAME}-run${RUN_INDEX}-${EXP_TIMESTAMP}/"
 echo ""
 
+# When full ImageNet is under ../datasets/ImageNet, build shared 100/200/500 splits once (same as run.py).
+python -c "
+import sys
+sys.path.insert(0, 'scripts')
+from prepare_imagenet_subsets import config_needs_imagenet_subsets, ensure_imagenet_subsets_from_full_data
+name = sys.argv[1]
+if not config_needs_imagenet_subsets(name):
+    sys.exit(0)
+ensure_imagenet_subsets_from_full_data()
+" "$CONFIG_NAME" || exit 1
+
 # Build command with optional epoch override and new save path (--config-name is name without .yaml)
 # Do not override dataset_root/class_order here (config YAMLs define them; override triggers Hydra struct error).
 CMD="CUDA_VISIBLE_DEVICES=0 python main.py \

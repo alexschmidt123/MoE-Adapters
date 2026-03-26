@@ -15,10 +15,29 @@ from .utils import get_dataset_class_names
 from .uneven_scenario import UnevenClassIncremental
 
 
+_PREPARE_IMAGENET_SUBSETS_MOD = None
+
+
+def _prepare_imagenet_subsets_module():
+    """Lazy-load scripts/prepare_imagenet_subsets.py (avoids sys.path hacks in continual_clip)."""
+    global _PREPARE_IMAGENET_SUBSETS_MOD
+    if _PREPARE_IMAGENET_SUBSETS_MOD is None:
+        import importlib.util
+
+        cil_dir = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(cil_dir, "scripts", "prepare_imagenet_subsets.py")
+        spec = importlib.util.spec_from_file_location("prepare_imagenet_subsets", path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        _PREPARE_IMAGENET_SUBSETS_MOD = mod
+    return _PREPARE_IMAGENET_SUBSETS_MOD
+
+
 def _ensure_imagenet_subset_assets(workdir: str, subset_size: str) -> None:
     """
     Ensure class order and split files exist for imagenet{subset_size}.
-    Auto-generates by invoking scripts/prepare_imagenet_subsets.py when missing.
+    When full ImageNet is under <repo>/datasets/ImageNet, delegates to shared 100/200/500 prep.
     """
     cil_dir = os.path.dirname(os.path.dirname(__file__))
     reqs_dir = os.path.join(cil_dir, "dataset_reqs")
@@ -27,18 +46,23 @@ def _ensure_imagenet_subset_assets(workdir: str, subset_size: str) -> None:
     train_split = os.path.join(split_dir, f"train_{subset_size}.txt")
     val_split = os.path.join(split_dir, f"val_{subset_size}.txt")
 
+    # Same layout as prepare script: repo/datasets/ImageNet (not cil/datasets/...).
+    imagenet_root = os.path.normpath(os.path.join(cil_dir, "..", "datasets", "ImageNet"))
+    train_root = os.path.join(imagenet_root, "train")
+    val_root = os.path.join(imagenet_root, "val")
+    has_imagenet_data = os.path.isdir(train_root) and os.path.isdir(val_root)
+
+    if has_imagenet_data:
+        _prepare_imagenet_subsets_module().ensure_imagenet_subsets_from_full_data()
+        if os.path.exists(train_split) and os.path.exists(val_split):
+            return
+
     need_class_order = not os.path.exists(class_order_path)
     need_splits = not (os.path.exists(train_split) and os.path.exists(val_split))
     if not (need_class_order or need_splits):
         return
 
     script_path = os.path.join(cil_dir, "scripts", "prepare_imagenet_subsets.py")
-    imagenet_root = os.path.join(workdir, "datasets", "ImageNet")
-    train_root = os.path.join(imagenet_root, "train")
-    val_root = os.path.join(imagenet_root, "val")
-    has_imagenet_data = os.path.isdir(train_root) and os.path.isdir(val_root)
-
-    # Always try to create class_order/classes; create splits only if ImageNet train/val is present.
     cmd = [sys.executable, script_path, "--dataset-root", "../datasets/ImageNet", "--sizes", subset_size]
     if not has_imagenet_data:
         cmd.append("--skip-splits")
@@ -49,7 +73,6 @@ def _ensure_imagenet_subset_assets(workdir: str, subset_size: str) -> None:
             + (result.stderr or result.stdout or "(no output)")
         )
 
-    # For runtime training, split files are required.
     if not (os.path.exists(train_split) and os.path.exists(val_split)):
         raise FileNotFoundError(
             f"Missing ImageNet subset split files for imagenet{subset_size}: "
