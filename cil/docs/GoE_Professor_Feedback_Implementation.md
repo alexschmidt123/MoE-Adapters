@@ -11,9 +11,9 @@ This doc maps the professor’s suggested changes to the codebase and config key
 - **Idea:** `Z = Z_base + λ * Z_graph` with λ scheduled 0→1 so the router is baseline-driven early and graph-driven later.
 - **Code:** `cil/clip/model.py` (ResidualAttentionBlock forward):
   - `Z_base = x_re @ router_list[taskid]`, `Z_graph = einsum(Y, goe_router_w)`.
-  - `Z = Z_base + lam * Z_graph` when `goe_residual_lambda < 1`.
+  - Always `Z = Z_base + lam * Z_graph` (`lam` = `goe_residual_lambda`).
 - **Config:**
-  - `model.goe_residual_lambda` (float, default 1.0): 0 = baseline only, 1 = graph only. Use e.g. 0.2–0.5 early, then ramp to 1 (scheduling can be added later).
+  - `model.goe_residual_lambda` (float, default 1.0): scale on `Z_graph`; 0 = baseline logits only. Larger values add stronger graph contribution (not restricted to [0, 1]).
 
 ### Change B: Identity-biased adjacency — **implemented**
 

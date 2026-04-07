@@ -532,8 +532,8 @@ class ResidualAttentionBlock(nn.Module):
                 self.goe_experts_on_x = bool(getattr(cfg.model, 'goe_experts_on_x', True))
                 self.goe_route_from_per_expert = bool(getattr(cfg.model, 'goe_route_from_per_expert', True))
                 self.goe_freeze_gnn_after_task = int(getattr(cfg.model, 'goe_freeze_gnn_after_task', -1))
-                # Residual logits: Z = Z_base + lambda * Z_graph (baseline-safe early, graph helps later)
-                self.goe_residual_lambda = float(getattr(cfg.model, 'goe_residual_lambda', 1.0))  # 0 = baseline only, 1 = graph only
+                # Residual logits: Z = Z_base + lambda * Z_graph (lambda scales Z_graph; 0 = baseline only)
+                self.goe_residual_lambda = float(getattr(cfg.model, 'goe_residual_lambda', 1.0))
                 print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}, residual_lambda={self.goe_residual_lambda}")
                 self.alpha_graph = None
                 self.graph_entropy_weight = 0.0
@@ -765,13 +765,10 @@ class ResidualAttentionBlock(nn.Module):
                     # Z_graph[b,i] = Y[b,i] @ goe_router_w[i]
                     W_goe = self.goe_router_w_list[global_taskid].to(Y.device)
                     Z_graph = torch.einsum('bnh,nh->bn', Y, W_goe)
-                    # Residual logits (Change A): Z = Z_base + lambda * Z_graph for baseline-safe early learning
+                    # Residual logits (Change A): always Z = Z_base + lambda * Z_graph (lambda scales graph contribution)
                     lam = getattr(self, 'goe_residual_lambda', 1.0)
-                    if lam < 1.0:
-                        Z_base = x_re @ self.router_list[global_taskid].to(x_re.device)
-                        Z = Z_base + lam * Z_graph
-                    else:
-                        Z = Z_graph
+                    Z_base = x_re @ self.router_list[global_taskid].to(x_re.device)
+                    Z = Z_base + lam * Z_graph
                     if getattr(self, 'moe_router_z_loss_weight', 0) > 0 and self.is_train:
                         self._last_router_logits = Z
                     gates, load, full_gates = self.noisy_top_k_gating_from_logits(
