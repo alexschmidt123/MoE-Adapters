@@ -16,6 +16,7 @@ from .cc import conceptual_captions
 from . import utils
 import os
 import random
+import csv
 
 from .dynamic_dataset import DynamicDataset
 
@@ -169,6 +170,18 @@ class ClassIncremental(nn.Module):
 
         # start training
         self.model.train()
+        loss_csv_file = None
+        loss_csv_writer = None
+        if getattr(cfg, "save_training_loss_csv", True):
+            loss_csv_path = getattr(cfg, "training_loss_csv", "training_loss.csv")
+            if not os.path.isabs(loss_csv_path):
+                loss_csv_path = os.path.join(os.getcwd(), loss_csv_path)
+            os.makedirs(os.path.dirname(loss_csv_path) or ".", exist_ok=True)
+            file_has_data = os.path.isfile(loss_csv_path) and os.path.getsize(loss_csv_path) > 0
+            loss_csv_file = open(loss_csv_path, "a", newline="")
+            loss_csv_writer = csv.writer(loss_csv_file)
+            if not file_has_data:
+                loss_csv_writer.writerow(["task_id", "iteration", "loss"])
         # Disable tqdm progress bar if TQDM_DISABLE environment variable is set
         disable_tqdm = os.environ.get("TQDM_DISABLE", "0") == "1"
         for iteration in tqdm(range(total_iterations + 1), disable=disable_tqdm):
@@ -228,7 +241,12 @@ class ClassIncremental(nn.Module):
             loss.backward()
             optimizer.step()
 
+            if loss_csv_writer is not None:
+                loss_csv_writer.writerow([task_id, iteration, float(loss.detach().item())])
+                loss_csv_file.flush()
 
+        if loss_csv_file is not None:
+            loss_csv_file.close()
 
         self.model.eval()
 

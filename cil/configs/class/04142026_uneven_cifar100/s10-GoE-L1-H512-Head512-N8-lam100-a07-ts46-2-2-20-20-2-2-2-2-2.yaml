@@ -1,0 +1,58 @@
+# 04142026_uneven_cifar100: GoE L1-H512-Head512 N=8, λ=100, α=0.7. 10 tasks, task_sizes [46,2,2,20,20,2,2,2,2,2]; class_order cifar100.yaml. Run: --config-name 04142026_uneven_cifar100/s10-GoE-L1-H512-Head512-N8-lam100-a07-ts46-2-2-20-20-2-2-2-2-2
+
+hydra:
+  run:
+    dir: ./experiments/${scenario}/${config_name_no_ext:}-${now:%m%d%Y-%H%M%S}
+  job:
+    chdir: true
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '%(message)s'
+
+class_order: "class_orders/cifar100.yaml"
+dataset_root: "../datasets"
+workdir: ""
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+prompt_template: "a bad photo of a {}."
+
+batch_size: 32
+scenario: "class"
+dataset: "cifar100"
+task_sizes: [46, 2, 2, 20, 20, 2, 2, 2, 2, 2]
+
+
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+method: "MoE-Adapters-N8-GoE"
+lr: 1e-3
+ls: 0.0
+epochs: 15
+
+model:
+  num_experts: 8
+  top_k: 2
+  task_adaptive_top_k_base: 10
+  task_adaptive_top_k_step: 5
+  graph_mixer_enabled: true
+  graph_symmetrize: true
+  graph_add_self_loop: true
+  graph_num_layers: 1
+  graph_hidden_dim: 512
+  graph_head_layers: [512]
+  graph_alpha_init: 0.0
+  graph_entropy_weight: 0.0
+  graph_use_noisy_adjacency: false
+  graph_noise_epsilon: 0.0
+  goe_residual_alpha: 0.1
+  moe_load_balance_weight: 0.01
+  goe_experts_on_x: true
+  goe_route_from_per_expert: true
+  goe_freeze_gnn_after_task: -1
+  goe_residual_lambda: 100.0
+  graph_identity_bias_alpha: 0.7
+  graph_adj_top_m: 8
+  moe_router_z_loss_weight: 0.0001
