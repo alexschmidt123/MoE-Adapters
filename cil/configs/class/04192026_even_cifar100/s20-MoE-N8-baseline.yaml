@@ -1,0 +1,41 @@
+# 04192026_even_cifar100: MoE N8 baseline. 5 tasks, even task_sizes [20, 20, 20, 20, 20]; class_order cifar100.yaml. Run: --config-name 04192026_even_cifar100/s20-MoE-N8-baseline
+
+hydra:
+  run:
+    dir: ./experiments/${scenario}/${config_name_no_ext:}-${now:%m%d%Y-%H%M%S}
+  job:
+    chdir: true
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '%(message)s'
+
+class_order: "class_orders/cifar100.yaml"
+dataset_root: "../datasets"
+workdir: ""
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+prompt_template: "a bad photo of a {}."
+
+batch_size: 32
+scenario: "class"
+dataset: "cifar100"
+task_sizes: [20, 20, 20, 20, 20]
+
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+method: "MoE-Adapters-N8"
+lr: 1e-3
+ls: 0.0
+epochs: 15
+save_training_loss_csv: true
+training_loss_csv: "training_loss.csv"
+
+model:
+  num_experts: 8
+  top_k: 2
+  graph_mixer_enabled: false
+  moe_load_balance_weight: 0.01
+

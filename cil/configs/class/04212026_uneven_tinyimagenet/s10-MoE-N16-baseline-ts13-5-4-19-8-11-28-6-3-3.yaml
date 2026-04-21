@@ -1,0 +1,38 @@
+# 04212026_uneven_tinyimagenet: MoE N16 baseline. 10 tasks, uneven task_sizes [13, 5, 4, 19, 8, 11, 28, 6, 3, 3] (sum 100); class_order tinyimagenet100.yaml. Run: --config-name 04212026_uneven_tinyimagenet/s10-MoE-N16-baseline-ts13-5-4-19-8-11-28-6-3-3
+
+hydra:
+  run:
+    dir: ./experiments/${scenario}/${config_name_no_ext:}-${now:%m%d%Y-%H%M%S}
+  job:
+    chdir: true
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '%(message)s'
+
+class_order: "class_orders/tinyimagenet100.yaml"
+dataset_root: "../datasets"
+workdir: ""
+log_path: "metrics.json"
+model_name: "ViT-B/16"
+prompt_template: "a bad photo of a {}."
+
+batch_size: 32
+scenario: "class"
+dataset: "tinyimagenet"
+task_sizes: [13, 5, 4, 19, 8, 11, 28, 6, 3, 3]
+
+weight_decay: 0.0
+l2: 0
+ce_method: 0
+method: "MoE-Adapters-N16"
+lr: 1e-3
+ls: 0.0
+epochs: 15
+
+model:
+  num_experts: 16
+  top_k: 2
+  graph_mixer_enabled: false
+  moe_load_balance_weight: 0.01
