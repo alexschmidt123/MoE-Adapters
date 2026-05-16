@@ -1,0 +1,589 @@
+\documentclass{article}
+
+% NeurIPS 2026 anonymous submission style.
+% Keep this file anonymous for review.
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Common macros used by the rewritten introduction and later sections.
+\newcommand{\RR}{\mathbb{R}}
+\newcommand{\Ltr}{\mathcal{L}_{\mathrm{tr}}}
+\newcommand{\Lval}{\mathcal{L}_{\mathrm{val}}}
+\newcommand{\Vtau}{V_{\tau}}
+\newcommand{\Dtau}{\Delta_{\tau}}
+\newcommand{\Stau}{S_{\tau}}
+
+% Theorem environments for later section rewrites.
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
+\theoremstyle{definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\DontPrintSemicolon
+\SetAlgoNoEnd
+\SetNlSty{}{}{:}
+\SetAlgoNlRelativeSize{0}
+\SetAlCapNameFnt{\bfseries}
+\SetAlCapFnt{\scshape}
+\SetAlgoCaptionSeparator{ }
+
+\title{MoCE: Mixture of Communitified Experts for Class-Incremental Vision-Language Learning under Uneven Task Complexity}
+
+\title{MoCE: Mixture of Communitified Experts for Flexible Routing under Uneven Class-Incremental Complexity}
+
+\author{
+First Author$^1$\footnote{Contact Author}\and
+Second Author$^1$\and
+Third Author$^{2,3}$\And
+Fourth Author$^4$\\
+\affiliations
+$^1$Artificial Intelligence, Franklin College of Arts and Sciences, University of Georgia\\
+$^2$Computer Science, School of Computing, University of Georgia\\
+\emails
+\{first, second\}@example.com,
+third@other.example.com,
+fourth@example.com
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Class-incremental learning (CIL) with vision-language models is often formulated as a balanced sequence of class increments, but deployed systems rarely receive such regular updates. Some increments contain only a few closely related classes, while others introduce many visually diverse or semantically distant classes. We refer to this variation as \textbf{uneven class-incremental complexity}. It exposes a weakness of standard sparse Mixture-of-Experts (MoE) adapters: a fixed top-$k$ router activates the same number of isolated experts for every input and every increment, even when the amount of expert knowledge needed by the current update changes. We propose \textbf{MoCE}, a \textbf{Mixture of Communitified Experts} for CLIP-based class-incremental learning. MoCE decouples the number of \textit{executed} experts from the number of \textit{involved} experts. It represents adapters as nodes in an input-conditioned learnable graph, lets each node exchange messages with its neighbors, and then selects sparse \textit{community anchors}. A selected anchor is therefore not a single isolated expert; it is the representative of a graph community whose state has already absorbed information from related experts. As a result, MoCE can execute a small anchor set for efficiency while involving a variable number of neighboring experts in routing, and it can optionally increase the anchor budget for increments with more classes. This gives the router a flexible capacity response to uneven task complexity without dense expert execution. Experiments under even and uneven CIL schedules show that MoCE improves over standard MoE adapters, with especially consistent gains when the number of arriving classes varies across increments.
+\end{abstract}
+
+\section{Introduction}
+Vision-language models (VLMs), especially CLIP-like models, learn transferable visual representations by aligning images and texts at large scale \cite{radford2021learning,10.1109/TPAMI.2024.3369699}. Their zero-shot recognition ability makes them attractive for open-world applications such as visual question answering, image captioning, and cross-modal retrieval \cite{agrawal2016vqavisualquestionanswering,ye2024mplugowlmodularizationempowerslarge,penamakuri2023answerminingpoolimages}. Yet a deployed recognition system cannot remain static. New product categories, medical labels, safety events, or user-defined concepts may arrive after deployment, and the model must learn them without losing its previous ability. Naive fine-tuning can damage the pretrained image-text alignment and is expensive for large VLMs \cite{french1999catastrophic,DING2024120710,han2024parameterefficientfinetuninglargemodels}.
+
+We study class-incremental learning (CIL), where a learner receives a sequence of class increments $\{\mathcal{D}_t\}_{t=1}^{T}$ and must recognize all classes seen so far \cite{Zhou_2024}. A large body of work evaluates CIL under balanced streams: each increment contains the same number of classes, so every update is implicitly treated as having similar complexity. This assumption is convenient but unrealistic. In practice, one update may contain two classes, another may contain twenty, and their semantic diversity may differ even when their class counts are equal. We call this setting \emph{uneven class-incremental complexity}. It is not merely a detail of the benchmark split; it changes the amount of adaptation capacity and cross-expert reuse that a model should allocate to each increment.
+
+Parameter-efficient fine-tuning (PEFT) is a natural tool for continual VLM adaptation because it keeps the pretrained backbone mostly frozen and learns lightweight modules such as adapters or low-rank updates \cite{houlsby2019parameter,hu2022lora,tang2024mindinterferenceretainingpretrained}. Sparse Mixture-of-Experts (MoE) adapters further increase capacity by maintaining multiple experts and activating only a small subset for each input \cite{shazeer2017outrageously,fedus2022switch,yu2024boostingcontinuallearningvisionlanguage,11122658}. However, the usual MoE router makes a rigid decision: choose $k$ experts and ignore the others. The number of executed experts and the number of experts that can influence the decision are both effectively tied to the same fixed top-$k$ design. This is poorly matched to uneven increments. A small and coherent increment may need a compact local region of the expert space, while a large and diverse increment may need evidence from multiple expert neighborhoods. Increasing $k$ globally wastes computation on easy increments; keeping $k$ small can starve complex increments of useful expert context.
+
+The key idea of this paper is that a continual MoE should not only ask \emph{which experts should be executed?} It should also ask \emph{which expert communities should be involved in the routing decision?} We propose \textbf{MoCE}, a \textbf{Mixture of Communitified Experts}. In MoCE, each adapter expert is a node in a learnable graph. The node state of an expert is constructed from the current CLIP representation and a trainable expert embedding. An input-conditioned adjacency head then predicts which experts should communicate. Graph message passing updates each expert state using its neighbors, and the resulting per-expert graph states produce routing logits. Top-$k$ routing is performed on these community-aware logits, so the selected experts are \emph{community anchors} rather than isolated endpoints.
+
+This design creates two forms of flexible expert involvement. First, even when the number of executed experts is fixed, the number of \emph{involved} experts can vary because a selected anchor carries information from its graph neighbors. With top-$m$ graph sparsity, the involved set for a sample is the union of the selected anchors and their graph neighborhoods; its size changes with the learned adjacency and with overlap among communities. Second, when the number of new classes in the current increment is available, MoCE can use a task-complexity-adaptive anchor budget, increasing the number of executed anchors for more complex increments and using fewer anchors for simpler increments. In both cases, MoCE preserves sparse adapter execution while allowing the routing context to expand or contract with task complexity.
+
+Concretely, MoCE is inserted into a CLIP-based MoE-adapter framework. The base MoE router produces logits $Z_{\mathrm{base}}$. The graph router builds per-sample expert node states, performs message passing over a row-normalized expert graph, and produces per-expert graph logits $Z_{\mathrm{graph}}$. The final router uses residual logit mixing,
+\[
+Z = Z_{\mathrm{base}} + \lambda Z_{\mathrm{graph}},
+\]
+which exactly recovers the standard MoE router when $\lambda=0$. Thus MoCE can be interpreted as a conservative extension of sparse MoE: it leaves the original router intact but augments it with graph-based community evidence when uneven increments require broader expert involvement.
+
+Our contributions are four folds: (a) We formulate \emph{uneven class-incremental complexity} as an important and practical stress case for sparse MoE-based VLM continual learning, where different increments require different amounts of expert involvement. (b) We propose MoCE, a community-anchored MoE framework that decouples executed experts from involved experts: sparse anchors are executed, while their graph communities participate in routing through message passing. (c) We provide a reproducible mathematical specification of MoCE, including input-conditioned expert nodes, learnable adjacency, top-$m$ expert neighborhoods, residual graph routing, flexible involved expert sets, and optional task-adaptive anchor budgets. (d) We evaluate MoCE on even and uneven CIL schedules and analyze how graph-based expert communities improve routing flexibility for continual VLM adaptation.
+
+
+\section{Related Work}
+\subsection{Continual Learning for Vision and Vision-Language Models}
+Continual learning seeks to update a model over a stream of tasks without joint retraining on all previous data. Classical approaches include regularization methods that protect important parameters or distill old predictions, rehearsal methods that store or synthesize past examples, and expansion methods that allocate new capacity over time \cite{kirkpatrick2017overcoming,li2017learningwithoutforgetting,rebuffi2017icarl,douillard2022dytoxtransformerscontinuallearning,Zhou_2024}. In class-incremental learning, the difficulty is stronger because the model must make a single prediction over all seen classes rather than relying on task identity at test time.
+
+Continual learning for VLMs adds another constraint: adaptation should preserve the pretrained image-text alignment. Recent methods such as C-CLIP and CLAP4CLIP study how to retain CLIP knowledge while learning incrementally \cite{liu2025cclip,jha2024clap4clip}. Other work analyzes interference in parameter-efficient continual learning of VLMs \cite{tang2024mindinterferenceretainingpretrained}. These methods focus primarily on preventing forgetting and retaining pretrained knowledge. MoCE is complementary: it targets the allocation problem that appears when the adaptation modules are sparse experts and the stream has uneven complexity.
+
+\subsection{Parameter-Efficient Fine-Tuning and Sparse Mixture of Experts}
+PEFT methods adapt large pretrained models by updating a small number of parameters, such as adapter modules or low-rank matrices \cite{houlsby2019parameter,hu2022lora,han2024parameterefficientfinetuninglargemodels}. This is attractive for CIL because frozen pretrained weights provide a stable representation while lightweight modules absorb new knowledge.
+
+Sparse MoE layers use conditional computation: many experts are available, but each input is routed to only a few of them \cite{shazeer2017outrageously,fedus2022switch}. MoE-Adapters and MoE-Adapters++ bring this idea to continual VLM adaptation by combining PEFT experts with learned routers \cite{yu2024boostingcontinuallearningvisionlanguage,11122658}. Their main benefit is efficient capacity expansion. Their limitation, for our setting, is that a standard router treats experts as independent choices and uses a fixed top-$k$ execution pattern. This makes the expert involvement pattern almost constant even when task complexity changes. MoCE keeps the sparse-computation advantage of MoE adapters but changes the unit of routing from isolated experts to graph-aware expert communities.
+
+\subsection{Graph Neural Networks for Expert Communication}
+Graph neural networks update node representations through neighborhood message passing \cite{kipf2017semisupervised,velickovic2018graph}. This is useful when the entities being modeled have latent relations that should influence decisions. In MoCE, the entities are adapter experts. The graph does not replace the MoE layer and does not require dense execution of all experts. Instead, it is used before routing: expert node states communicate, and the router selects anchors whose states summarize local graph communities.
+
+This distinction is important for uneven CIL. A graph community can contain a different number of related experts depending on the input and the current adjacency. Therefore, the effective set of experts involved in routing can be larger than the set of executed experts and can vary across examples or tasks. Existing VLM continual-learning methods mainly ask how to preserve old knowledge, while existing MoE-adapter methods mainly ask how to select a fixed number of experts efficiently. MoCE asks a different question: how can the router vary the amount of expert evidence it consults as the complexity of the class increment changes?
+
+\begin{table}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+Method family & Frozen VLM & Sparse exec. & Expert comm. & Flexible involvement \\
+\midrule
+Regularization / rehearsal CL & -- & -- & -- & -- \\
+PEFT for VLM-CL & \checkmark & -- & -- & limited \\
+MoE adapters & \checkmark & \checkmark & -- & fixed top-$k$ \\
+MoCE (ours) & \checkmark & \checkmark & \checkmark & graph communities \\
+\bottomrule
+\end{tabular}}
+\caption{Qualitative positioning. Standard MoE adapters execute a fixed number of independent experts. MoCE keeps sparse execution but lets selected anchors communicate with graph neighborhoods, making the number of experts involved in routing flexible under uneven class-incremental complexity.}
+\label{tab:qualitative_related_work}
+\end{table}
+
+
+\section{Methodology}
+\subsection{Design Principle: Sparse Execution, Flexible Evidence}
+Sparse MoE is attractive for continual VLM adaptation because it adds capacity without executing all modules for every input \cite{shazeer2017outrageously,fedus2022switch,yu2024boostingcontinuallearningvisionlanguage,11122658}. Its weakness under uneven increments is more subtle: the same top-$k$ mechanism controls both \emph{computation} and \emph{evidence}. Once the router selects $k$ experts, only these $k$ isolated modules influence the prediction. This coupling is reasonable when every increment has similar complexity, but it is restrictive when one increment contains a few coherent classes and another contains many diverse classes.
+
+MoCE separates these two roles. The model still executes only a sparse set of experts for efficiency, but the routing decision is allowed to consult a larger and input-dependent \emph{expert community}. We use the word community operationally: a community is not an offline cluster; it is the ego-neighborhood induced by the current learned expert graph. Thus a selected expert acts as a \emph{community anchor}. Its adapter is executed, but its routing score has already absorbed information from neighboring experts. This is the central difference from standard MoE adapters: MoCE chooses $k$ anchors, not merely $k$ isolated experts.
+
+\paragraph{CIL setup and backbone.}
+We consider a class-incremental stream $\{\mathcal{D}_t\}_{t=1}^{T}$. Increment $t$ introduces new label set $\mathcal{Y}_t$ with class count $C_t=|\mathcal{Y}_t|$. Balanced protocols make $C_t$ constant. In our setting $C_t$ and semantic diversity can vary, so $C_t$ is used as a simple observable signal of task complexity. The visual backbone is a frozen CLIP encoder \cite{radford2021learning}. Trainable adapter experts are inserted into transformer blocks. For a block representation $ X\in\mathbb{R}^{L\times B\times D},
+$ where $L$ is sequence length, $B$ is batch size, and $D$ is hidden dimension, the class-token feature for sample $b$ is
+$
+    h_b=X_{0,b,:}\in\mathbb{R}^{D}.
+    \label{eq:cls_token}
+$
+We use $h_b$ rather than a task identifier because class-incremental evaluation must make a single prediction over all seen classes without being told which task generated the test image.
+
+The adapter layer contains $N$ experts $\{E_i\}_{i=1}^{N}$. We distinguish two sets throughout the method. The \emph{executed set} contains experts whose full adapter modules process the token sequence. The \emph{involved set} contains experts whose lightweight graph states contribute evidence to routing. Standard sparse MoE makes these sets essentially the same. MoCE deliberately makes the involved set more flexible than the executed set.
+
+Figure~\ref{fig:goe_architecture} summarizes the contrast. A standard router selects top-$k$ independent experts from $h_b$. MoCE first builds an input-conditioned graph over expert nodes, performs message passing, and then selects sparse community anchors from graph-enhanced logits. The expensive part remains sparse adapter execution; the additional graph branch is a lightweight routing computation over expert states.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1.0\linewidth]{Architecture Overview.png}
+\caption{Architecture comparison between a standard MoE adapter and MoCE. Standard MoE selects a fixed top-$k$ set of isolated experts. MoCE builds an input-conditioned expert graph, lets each expert state communicate with neighbors, and then selects sparse community anchors using $z=z^{\mathrm{base}}+\lambda z^{\mathrm{graph}}$. The executed set remains sparse, while the involved routing context can include a variable number of graph-neighbor experts.}
+\label{fig:goe_architecture}
+\end{figure}
+
+\subsection{Standard Sparse MoE as the Limiting Case}
+A sparse MoE adapter starts with a router. For sample $b$, the base routing logits are
+\begin{equation}
+    z^{\mathrm{base}}_{b}=h_b W_g+b_g,
+    \qquad W_g\in\mathbb{R}^{D\times N},\quad b_g\in\mathbb{R}^{N}.
+    \label{eq:base_router}
+\end{equation}
+This equation is the standard conditional-computation interface: the representation $h_b$ asks which expert should be trusted. During training, noisy top-$k$ gating encourages exploration and load balancing,
+\begin{equation}
+    \tilde z_{b,i}=z^{\mathrm{base}}_{b,i}+\epsilon_{b,i}\,\mathrm{softplus}\big((h_b W_{\mathrm{noise}})_i\big),
+    \label{eq:noisy_logits}
+\end{equation}
+where $\epsilon_{b,i}\sim\mathcal{N}(0,1)$. The router then selects
+$
+    \mathcal{K}_{b}=\mathrm{TopK}(\tilde z_b,k)
+$
+and normalizes scores only over the selected experts,
+\begin{equation}
+    g_{b,i}=\begin{cases}
+    \dfrac{\exp(\tilde z_{b,i})}{\sum_{j\in\mathcal{K}_b}\exp(\tilde z_{b,j})}, & i\in\mathcal{K}_b,\\[6pt]
+    0, & i\notin\mathcal{K}_b.
+    \end{cases}
+    \label{eq:sparse_gate}
+\end{equation}
+Finally, only selected experts are executed as $
+    Y^{\mathrm{moe}}_{:,b,:}=\sum_{i\in\mathcal{K}_b} g_{b,i}\,E_i(X_{:,b,:})$.
+These steps explain both the strength and the limitation of standard MoE. It is computationally efficient because only $k$ adapters run. However, the same $k$ experts are also the only experts whose specialized knowledge can influence the decision. For uneven class increments, this fixed evidence budget is the bottleneck: increasing $k$ helps complex increments but wastes computation on simple ones, while keeping $k$ small protects efficiency but suppresses useful cross-expert context.
+
+\subsection{MoCE: Routing through Expert Communities}
+MoCE keeps sparse execution but replaces isolated routing with graph-community routing. The graph branch is placed before adapter execution. It updates cheap expert node states, not full token-level expert outputs. This is why MoCE can consult more experts in routing without paying the cost of dense MoE execution.
+
+\paragraph{Input-conditioned expert nodes.}
+A graph over experts is useful only if its nodes know both the current input and their own expert identity. We therefore initialize node $i$ for sample $b$ as
+\begin{equation}
+    H^{(0)}_{b,i}=P h_b+e_i,
+    \qquad P\in\mathbb{R}^{H\times D},\quad e_i\in\mathbb{R}^{H}.
+    \label{eq:node_init}
+\end{equation}
+The projected input $Ph_b$ tells every node what must be recognized; the embedding $e_i$ tells the graph which expert specialization is being considered. This construction is important. If the graph states were only expert embeddings, the graph router could collapse into a global expert prior shared by all samples. Because $H^{(0)}_{b,i}$ depends on $h_b$, the graph evidence is input-dependent; because it also contains $e_i$, it remains expert-specific.
+
+\paragraph{Input-conditioned expert graph.}
+Class increments with different complexity should not force the same expert relations. MoCE therefore predicts the adjacency from the current representation:
+\begin{equation}
+    S_b=\mathrm{reshape}(\psi_A(h_b),N,N),
+    \label{eq:adj_logits_raw}
+\end{equation}
+where $S_{b,i,j}$ is the unnormalized tendency of expert $i$ to listen to expert $j$. When symmetric communication is desired, we use $S_b\leftarrow(S_b+S_b^\top)/2$. The row-wise softmax
+\begin{equation}
+    A^{0}_{b,i,j}=\frac{\exp(S_{b,i,j})}{\sum_{r=1}^{N}\exp(S_{b,i,r})}
+    \label{eq:row_softmax_adj}
+\end{equation}
+turns each row into a distribution over possible neighbors. The row normalization has a clear interpretation: for each potential anchor $i$, it specifies which other experts provide routing evidence to $i$.
+
+A fully connected expert graph would blur expert identities and make every route look similar. Inspired by the locality bias of graph neural networks \cite{kipf2017semisupervised,velickovic2018graph}, MoCE keeps only the strongest $m$ outgoing neighbors:
+\begin{equation}
+    M_{b,i,j}=\mathbb{I}\!\big[j\in\mathrm{TopM}(A^{0}_{b,i,:},m)\big], \quad
+%     \label{eq:topm_mask}
+% \end{equation}
+% \begin{equation}
+    \bar A_{b,i,j}=\frac{A^{0}_{b,i,j}M_{b,i,j}}{\sum_{r=1}^{N}A^{0}_{b,i,r}M_{b,i,r}+\varepsilon}.
+    \label{eq:topm_adj}
+\end{equation}
+This sparsified row defines the local community around expert $i$ for sample $b$. If top-$m$ is disabled, $\bar A=A^0$. Finally, self-information is preserved by an identity-biased mixture,
+\begin{equation}
+    A_b=\alpha I_N+(1-\alpha)\bar A_b,
+    \qquad \alpha\in[0,1].
+    \label{eq:identity_adj}
+\end{equation}
+The identity path prevents the graph from overwriting a useful specialist with uncertain neighbor information, especially early in training or for simple increments whose evidence should remain concentrated.
+
+\paragraph{Message passing produces community states.}
+Given $A_b$, MoCE performs $L_g$ graph-message-passing layers,
+\begin{equation}
+    H^{(\ell+1)}_{b}=\phi\!\left(\mathrm{LN}\!\left(A_bH^{(\ell)}_{b}W_{\ell}+\mathbf{1}b_{\ell}^{\top}\right)\right),
+    \label{eq:graph_conv}
+\end{equation}
+with optional residual connections between graph layers. This equation is deliberately applied to expert states rather than image tokens. After one layer, node $i$ contains evidence from its top-$m$ neighbors; after multiple layers, it can aggregate broader but still structured expert context. Let
+\begin{equation}
+    Y=H^{(L_g)}\in\mathbb{R}^{B\times N\times H}.
+\end{equation}
+Then $Y_{b,i,:}$ is the community-aware state of expert $i$ for sample $b$.
+
+\paragraph{Per-expert graph logits.}
+The graph state is converted into routing evidence separately for each expert:
+\begin{equation}
+    z^{\mathrm{graph}}_{b,i}=\langle Y_{b,i,:},w^{\mathrm{goe}}_{i}\rangle,
+    \qquad W^{\mathrm{goe}}=[w^{\mathrm{goe}}_1;\ldots;w^{\mathrm{goe}}_N]\in\mathbb{R}^{N\times H}.
+    \label{eq:graph_logits}
+\end{equation}
+The expert-specific projection matters for identifiability. A single shared scalar head could behave like a generic graph bias. Eq.~\eqref{eq:graph_logits} instead asks whether the \emph{community state of expert $i$} supports choosing expert $i$ as an anchor.
+
+\paragraph{Residual graph routing.}
+MoCE does not discard the strong MoE router. It augments it through residual logit mixing:
+\begin{equation}
+    z_{b}=z^{\mathrm{base}}_{b}+\lambda z^{\mathrm{graph}}_{b}.
+    \label{eq:residual_logits}
+\end{equation}
+This residual form makes the relationship to existing MoE adapters explicit. Setting $\lambda=0$ exactly recovers Eq.~\eqref{eq:base_router}. Positive $\lambda$ lets graph communities correct or reinforce the independent router when the input requires broader expert context. Thus MoCE is a conservative extension rather than a replacement of sparse MoE.
+
+\subsection{Flexible Expert Involvement}
+The mixed logits select community anchors, i.e., $\mathcal{K}_b=\mathrm{TopK}(z_b,k_b)$, where $k_b$ can be fixed or stage-adaptive. The executed set is still $\mathcal{K}_b$, so inference remains sparse. The involved routing set, however, is the union of the selected anchors and the graph neighbors whose messages were used by those anchors:
+\begin{equation}
+    \mathcal{U}_b=\bigcup_{i\in\mathcal{K}_b}\left(\{i\}\cup\mathcal{N}_b(i)\right),
+    \qquad
+    \mathcal{N}_b(i)=\{j:M_{b,i,j}=1\}.
+    \label{eq:community_union}
+\end{equation}
+The effective number of experts involved in routing is therefore
+\begin{equation}
+    n^{\mathrm{inv}}_b=|\mathcal{U}_b|,
+    \qquad
+    k_b\le n^{\mathrm{inv}}_b\le \min(N,k_b(m+1)).
+    \label{eq:effective_involved_number}
+\end{equation}
+This inequality is the core capacity argument. Standard MoE has $n^{\mathrm{inv}}_b=k_b$: every executed expert is an isolated decision. MoCE has a variable $n^{\mathrm{inv}}_b$. If the selected anchors share neighbors, the involved set is compact; if they occupy different graph regions, the involved set expands. Therefore the model can use a small expert community for simple increments and a broader collection of communities for complex increments, while still executing only the anchors.
+
+When the stream provides the class count of the current increment, MoCE can also adapt the anchor budget itself:
+\begin{equation}
+    k_t=\min\left(N,\max\left(1,k_0+\left\lfloor\frac{C_t-C_0}{\Delta}\right\rfloor\right)\right).
+    \label{eq:adaptive_k}
+\end{equation}
+Here $k_0$ is the base anchor budget, $C_0$ is a reference increment size, and $\Delta$ controls how many additional classes justify one more anchor. This stage-level rule uses only stream metadata available during incremental training; it does not provide the test-time task label of an individual image. If adaptive anchors are disabled, $k_t=k_0$ and flexibility still comes from Eq.~\eqref{eq:effective_involved_number}. If enabled, complex increments can both execute more anchors and involve wider graph communities.
+
+With anchors selected, MoCE uses the same sparse adapter aggregation as standard MoE,
+\begin{equation}
+    Y^{\mathrm{moe}}_{:,b,:}=\sum_{i\in\mathcal{K}_b}g_{b,i}E_i(X_{:,b,:}),
+    \label{eq:moce_output}
+\end{equation}
+and the transformer block output is $X^{\mathrm{out}}=X+\mathrm{MLP}(\mathrm{LN}_2(X))+Y^{\mathrm{moe}}$. The graph branch therefore changes \emph{who is consulted} before routing, not the sparse-execution contract of the adapter layer.
+
+\subsection{Training Objective and Algorithm}
+MoCE is trained with the classification objective of the underlying CIL framework. As in sparse MoE, we retain a load-balancing term to prevent expert collapse and a router-logit regularizer to stabilize gating. The loss is
+\begin{equation}
+    \mathcal{L}=\mathcal{L}_{\mathrm{ce}}+\beta\mathcal{L}_{\mathrm{lb}}(g,\ell)+\gamma\mathcal{L}_{z}(z),
+    \label{eq:loss}
+\end{equation}
+where $g$ are sparse gates, $\ell$ denotes expert load, and $z$ are the final mixed router logits. The load-balancing term is computed from the final routing decisions, because those decisions include both base and graph evidence.
+
+\begin{algorithm}[H]
+\caption{MoCE Training with Flexible Expert-Community Routing}
+\label{alg:moce_training}
+\begin{algorithmic}[1]
+\Require CIL tasks $\{\mathcal{D}_t\}_{t=1}^{T}$ with class counts $C_t$, frozen CLIP backbone, experts $\{E_i\}_{i=1}^{N}$
+\Require base anchor budget $k_0$, graph-neighbor budget $m$, graph weight $\lambda$, identity bias $\alpha$
+
+\For{$t=1$ to $T$}
+    \State Set anchor budget $k_t$ by Eq.~\eqref{eq:adaptive_k}, or use $k_t=k_0$ if adaptive anchors are disabled
+    
+    \For{mini-batch $(X,y)\sim\mathcal{D}_t$}
+        \State Extract class-token features $h_b=X_{0,b,:}$
+        \State Compute base logits $z^{\mathrm{base}}_b=h_bW_g+b_g$
+        \State Build input-conditioned expert nodes $H^{(0)}_{b,i}=Ph_b+e_i$
+        \State Predict, sparsify, and identity-mix adjacency $A_b$ using Eqs.~\eqref{eq:adj_logits_raw}--\eqref{eq:identity_adj}
+        \State Pass messages over the expert graph to obtain community states $Y$ using Eq.~\eqref{eq:graph_conv}
+        \State Compute per-expert graph evidence $z^{\mathrm{graph}}_{b,i}=\langle Y_{b,i,:},w_i^{\mathrm{goe}}\rangle$
+        \State Mix evidence $z_b=z^{\mathrm{base}}_b+\lambda z^{\mathrm{graph}}_b$
+        \State Select community anchors $\mathcal{K}_b=\mathrm{TopK}(z_b,k_t)$ and sparse gates $g_{b,i}$
+        \State Form involved communities $\mathcal{U}_b$ by Eq.~\eqref{eq:community_union}; execute only anchors $E_i$, $i\in\mathcal{K}_b$
+        \State Update trainable experts, router, and graph parameters using Eq.~\eqref{eq:loss}
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+
+\section{Experiments}
+\subsection{Experiment Setting}
+\textbf{Datasets.}
+We evaluated our method under class-incremental learning (CIL) on CIFAR100 and TinyImageNet. CIFAR100 was split into \{10, 20, 50\} incremental steps, while TinyImageNet was split into \{5, 10, 20\} steps. These settings assess the model's ability to mitigate catastrophic forgetting while preserving zero-shot recognition.\\
+\textbf{Metrics.}
+Following Cord et al. (2023), we report average and last accuracy. Average accuracy measures performance across all incremental tasks, while last accuracy reflects the final performance after learning the last task.\\
+\textbf{Implementation Details.}
+All experiments used CLIP with a ViT-B/16 image encoder and LoRA-based experts. We set the total number of experts to $N_E=22$, varied the active expert number in \{8, 16\}, and used Top-$K$ routing with $K=2$ through a single MLP router. For DDAS calibration, TinyImageNet was used as the reference dataset, with full-shot and few-shot thresholds set to 0.065 and 0.06, respectively. A pretrained AlexNet, followed by an MLP and non-linear layer, served as the feature extractor for the autoencoder. We further incorporated a graph mixer module to enhance inter-expert communication.
+We evaluated the proposed method against Standard MoE Adapters under both even and uneven CIL task splits. The uneven settings include descending \{46, 2, 2, 20, 20, 2, 2, 2, 2, 2\}, ascending \{3, 3, 4, 5, 6, 8, 11, 13, 19, 28\}, and disordered \{13, 5, 4, 19, 8, 11, 28, 6, 3, 3\} task sequences. We used AdamW with cosine annealing for 100 iterations, selected the learning rate from \{0.001, 0.0001\}, set batch size to 128, and trained for one epoch per task. Weight decay and label smoothing were set to 0. All results were averaged over three runs.
+\subsection{Results}
+\subsubsection{Uneven Task Results on Class Incremental Learning}
+Table 2 reports CIFAR100 results under three uneven 10-step CIL schedules. Across all task-size settings and both expert numbers, MoCE consistently outperforms the standard MoE baseline in last and average accuracy. For $N=8$, MoCE improves last accuracy by $3.12$--$9.99$ percentage points and average accuracy by $3.23$--$5.63$ points. For $N=16$, the gains reach up to $9.82$ points in last accuracy and $6.12$ points in average accuracy. These results suggest that graph-based expert communication improves robustness under irregular task sequences, especially when class distributions vary substantially across stages.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{12pt}
+
+\label{tab:cifar100_uneven_n8_ieee}
+\begin{tabular}{lccc}
+\toprule
+\textit{\textbf{N}} & Task Size & MoE & MoCE \\
+\midrule
+ & Task Size 1 & 76.79/83.90 &  79.91/87.13 \\
+8& Task Size 2 & 74.15/85.28 & 84.14/90.91 \\
+ & Task Size 3 & 79.12/90.16 & 85.85/94.69 \\
+\bottomrule
+
+ & Task Size 1 & 75.88/82.62  & 77.80/85.69 \\
+16& Task Size 2 & 73.32/84.53  & 83.14/90.65 \\
+ & Task Size 3 & 77.84/89.59  & 85.22/94.72 \\
+\bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{CIFAR100 uneven (10-step). Each entry is \textit{Last/Average}
+Task Size 1: 46-2-2-20-20-2-2-2-2-2; 
+Task Size 2: 13-5-4-19-8-11-28-6-3-3; 
+Task Size 3: 3-3-4-5-6-8-11-13-19-28.(\%).}
+\footnotesize
+\end{table}
+
+Table 3 reports TinyImageNet results under the same uneven 10-step CIL schedules. MoCE consistently outperforms MoE across all reported settings. For $N=8$, MoCE improves last accuracy by $2.00$--$7.40$ percentage points and average accuracy by $3.19$--$6.08$ points. For $N=16$, the gains range from $0.87$ to $6.76$ points in last accuracy and from $2.04$ to $5.38$ points in average accuracy. The strongest result appears under Task Size 3, where MoCE reaches $88.23\%$ last accuracy and $95.23\%$ average accuracy. These results further show that graph-based expert communication improves robustness under uneven CIL settings.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{10pt}
+
+\label{tab:tinyimagenet_uneven_n8_ieee}
+\begin{tabular}{lccc}
+\toprule
+\textit{\textbf{N}} & Task Size & MoE & MoCE \\
+\midrule
+ & Task Size 1 & 80.18/84.73 &  82.18/87.92\\
+8& Task Size 2 & 77.9/84.08 & 83.79/90.16\\
+ & Task Size 3 & 80.83/90.66 & 88.23/95.23\\
+\bottomrule
+
+ & Task Size 1 & 79.38/84.06  & 80.25/86.1\\
+16& Task Size 2 & 77.66/86.07  & 82.02/89.64 \\
+ & Task Size 3 & 79.84/89.73  & 86.60/95.11 \\
+\bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{TinyImageNet uneven (10-step).Each entry is \textit{Last/Average}
+Task Size 1: 46-2-2-20-20-2-2-2-2-2; 
+Task Size 2: 13-5-4-19-8-11-28-6-3-3; 
+Task Size 3: 3-3-4-5-6-8-11-13-19-28.(\%).}
+\footnotesize
+
+\end{table}
+
+\subsubsection{Comparison with State-of-the-art Methods on Uneven Tasks}
+
+
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{10pt}
+
+\label{tab:cifar100_uneven_method_ieee}
+\begin{tabular}{lccc}
+\toprule
+Method & Last & Avg.\\
+\midrule
+Finetune& 77.91 & 81.83  \\
+Finetune ce ext&  75.79 & 81.28  \\
+LwF& 65.81 & 73.5 \\
+LwF-VR& 64.31 & 73.71\\
+ZSCL& 79.01 & 84.25 \\
+iCaRL& 62.3 & 72.62 \\
+MoE Adapter& 75.16 & 82.21\\
+\textbf{Ours} & \textbf{81.53} & \textbf{87.5}\\
+\bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{Cifar100 uneven tasks with task size [28, 19, 13, 11, 8, 6, 5, 4, 3, 3].
+}
+\footnotesize
+
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{10pt}
+
+\label{tab:Tinyimagenet_uneven_method_ieee}
+\begin{tabular}{lccc}
+\toprule
+Method & Last & Avg.\\
+\midrule
+Finetune& 80.02 & 83.4  \\
+Finetune ce ext& 79.62 & 83.38 \\
+LwF& 70.82 & 77.83\\
+LwF-VR& 67.26 & 76.58 \\
+ZSCL& 80.58 & 84.88 \\
+iCaRL& 67.76 & 77.75\\
+MoE Adapter& 77.90 & 84.10 \\
+\textbf{Ours} & \textbf{82.35} & \textbf{87.23}\\
+\bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{TinyImageNet uneven tasks with task size [28, 19, 13, 11, 8, 6, 5, 4, 3, 3].
+}
+\footnotesize
+
+\end{table}
+
+\subsubsection{Even Task Results on Class Incremental Learning}
+Table 3 reports CIFAR100 results under balanced 10-, 20-, and 50-step class-incremental settings. MoCE improves over the MoE baseline in every reported setting. For the 10-step setting, MoCE improves average accuracy from $85.14\%$ to $87.31\%$ with $N=8$, and from $84.28\%$ to $88.06\%$ with $N=16$. For the 20-step setting, MoCE achieves larger last-accuracy gains, improving from $79.78\%$ to $84.55\%$ with $N=8$ and from $79.11\%$ to $82.83\%$ with $N=16$. In the 50-step setting, MoCE obtains the strongest last accuracy, reaching $89.95\%$ with $N=8$.\\
+These results show that MoCE is not only beneficial under imbalanced task schedules but also improves performance when classes are evenly distributed across incremental steps. The gains are especially clear in last accuracy, suggesting that graph-enhanced routing helps preserve final-stage performance after many incremental updates. This finding is important because last accuracy reflects the model's ability to retain knowledge after the complete task sequence.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{10pt}
+
+\label{tab:cifar100_even_n8and16_ieee}
+\begin{tabular}{lccc}
+\toprule
+\textit{\textbf{N}} & MoE & MoCE \\
+\midrule
+10 steps & & \\
+\midrule
+8& 77.00/85.14 & 78.35/87.31 \\
+16& 75.21/84.28  & 78.58/88.06 \\
+
+\midrule
+20 steps & & \\
+\midrule
+
+8 & 79.78/88.80 & 84.55/90.50 \\
+
+
+16& 79.11/86.32  & 82.83/89.31 \\
+
+\midrule
+50 steps & &\\
+\midrule
+
+8 & 84.93/88.44 & 89.95/91.18 \\
+
+
+16& 84.74/87.95  & 87.25/89.68 \\
+
+ \bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{CIFAR100 even tasks (10/20/50-step). Each entry is \textit{Last/Average}
+}
+\footnotesize
+
+\end{table}
+
+Table~4 summarizes the TinyImageNet results under balanced class-incremental settings. Overall, MoCE consistently outperforms the MoE baseline across all step settings and both expert numbers.
+In the 10-step setting, MoCE improves the average accuracy from 86.61\% to 88.16\% with $N=8$, and from 85.89\% to 88.02\% with $N=16$.
+The corresponding last accuracy also increases from 78.69\% to 79.20\% and from 78.03\% to 78.96\%, respectively.
+The improvement becomes more evident in the 20-step setting.
+With $N=8$, MoCE improves the last accuracy from 81.99\% to 86.50\% and the average accuracy from 87.67\% to 90.94\%.
+With $N=16$, MoCE improves the last accuracy from 81.74\% to 84.53\% and the average accuracy from 87.52\% to 90.16\%.
+These gains suggest that the proposed graph-enhanced expert communication is particularly beneficial when the continual learning process involves more incremental stages.\\
+In the 50-step setting, MoCE also maintains its advantage.
+For $N=8$, MoCE improves the last accuracy from 85.22\% to 87.76\% and the average accuracy from 88.75\% to 90.11\%.
+For $N=16$, MoCE improves the last accuracy from 85.42\% to 86.44\% and the average accuracy from 88.76\% to 89.43\%.\\
+Although the gains are smaller than those observed in the 20-step setting, MoCE remains consistently better than MoE.
+Overall, the TinyImageNet results show that MoCE provides stable improvements over the standard MoE baseline in both last and average accuracy.
+This trend indicates that expert communication through the graph-enhanced routing mechanism can support continual adaptation on a more challenging dataset, while also helping preserve performance across incremental learning stages.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{10pt}
+
+\label{tab:tinyimagenet_even_n8and16_ieee}
+\begin{tabular}{lccc}
+\toprule
+\textit{\textbf{N}} & MoE & MoCE \\
+\midrule
+10 steps & & \\
+\midrule
+8& 78.69/86.61 & 79.22/88.16 \\
+16& 78.03/85.89  & 78.96/88.02 \\
+
+\midrule
+20 steps & & \\
+\midrule
+
+8 & 81.99/87.67 & 86.50/90.94 \\
+
+
+16& 81.74/87.52  & 84.53/90.16 \\
+
+\midrule
+50 steps & &\\
+\midrule
+
+8 & 85.22/88.75 & 87.76/90.11\\
+
+
+16&  85.42/88.76 & 86.44/89.43\\
+
+ \bottomrule
+\end{tabular}
+\vspace{1mm}
+
+\caption{TinyImageNet even (10/20/50-step).Each entry is \textit{Last/Average}}
+\footnotesize
+
+\end{table}
+
+\subsubsection{Sensitive Testing Result}
+
+We conducted a sensitivity analysis to examine the effects of the hyperparameters $\lambda$ and $\alpha$ on model accuracy. The MoE model was used as the baseline. Since the baseline MoE model does not include $\lambda$ or $\alpha$, its performance was reported separately as a reference point, with an average accuracy of $84.08\%$ and a last accuracy of $77.90\%$.\\
+The proposed method remained relatively stable across most hyperparameter settings. As shown in Figure 2, most $\lambda$--$\alpha$ combinations achieved average accuracy values above the MoE baseline. For average accuracy, most settings produced results between approximately $84.50\%$ and $85.30\%$, suggesting that the model was not highly sensitive to small changes in $\alpha$ when $\lambda$ was relatively small or moderate. The best average accuracy was achieved when $\lambda = 100$ and $\alpha = 0.3$, reaching $87.53\%$. The next best settings were $\lambda = 100, \alpha = 0.7$ and $\lambda = 50, \alpha = 0.5$, which achieved $87.23\%$ and $86.81\%$, respectively. These results suggest that larger $\lambda$ values generally improved average accuracy, especially when paired with $\alpha = 0.3$ or $\alpha = 0.7$.\\
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\linewidth]{heatmap_average_accuracy.png}
+    \caption{Heatmap of the Average Accuracy for Hyperparameter Sensitivity Testing}
+    \label{fig:heatmap_average_accuracy}
+\end{figure}
+The last accuracy results (Figure 3) show a similar pattern but with a larger improvement over the baseline. The MoE baseline achieved a last accuracy of $77.90\%$, while all tested $\lambda$--$\alpha$ combinations improved over this baseline. The highest last accuracy was obtained at $\lambda = 100$ and $\alpha = 0.3$, reaching $82.71\%$. This was followed by $\lambda = 100, \alpha = 0.7$ with $82.35\%$, and $\lambda = 50, \alpha = 0.5$ with $81.89\%$. This pattern indicates that the proposed method provides clearer gains in final-stage performance, particularly under larger $\lambda$ values.\\
+Across both average accuracy and last accuracy, $\lambda$ had a stronger impact than $\alpha$. When $\lambda$ was small, such as $\lambda = 0.3$, $\lambda = 0.5$, or $\lambda = 0.7$, changing $\alpha$ produced only minor accuracy differences. However, when $\lambda$ increased to $50$ or $100$, the model achieved noticeably higher performance. In contrast, the effect of $\alpha$ was less consistent. Although $\alpha = 0.3$ and $\alpha = 0.7$ performed well when $\lambda = 100$, $\alpha = 0.5$ produced the best result when $\lambda = 50$. Therefore, $\alpha$ appears to fine-tune performance, while $\lambda$ plays a more dominant role in controlling model effectiveness.\\
+In summary, the sensitivity testing results show that the proposed method consistently outperformed the MoE baseline across all tested settings. The best overall configuration was $\lambda = 100$ and $\alpha = 0.3$, which achieved the highest performance in both average accuracy and last accuracy. These findings suggest that assigning a stronger weight to the proposed component through a larger $\lambda$ can improve model accuracy, while $\alpha$ mainly adjusts the strength of this effect.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\linewidth]{heatmap_last_accuracy.png}
+    \caption{Heatmap of the Last Accuracy for Hyperparameter Sensitivity Testing}
+    \label{fig:heatmap_last_accuracy}
+\end{figure}
+\section{Conclusion}
+In this paper, we propose MoCE, a graph-enhanced mixture-of-experts framework for class-incremental learning of vision-language models. Unlike standard MoE-adapter methods that primarily rely on independent expert routing, MoCE introduces a learnable expert graph to model relationships among experts and uses graph-enhanced residual logits to guide sparse expert selection. This design preserves the efficiency of sparse MoE routing while enabling structured communication among experts.\\
+Experiments on CIFAR100 and TinyImageNet demonstrate that MoCE consistently improves over the standard MoE baseline across both even and uneven class-incremental settings. The gains are particularly clear under uneven task schedules, where class distributions vary substantially across incremental stages. This suggests that graph-based expert communication can help mitigate unstable routing and improve knowledge reuse when task boundaries are imbalanced. MoCE also improves performance under balanced task splits, indicating that the benefit of expert communication is not limited to irregular task sequences.\\
+The sensitivity analysis further shows that the graph residual weight $\lambda$ has a stronger influence on performance than the identity-bias parameter $\alpha$. Larger values of $\lambda$ generally lead to better average and last accuracy, with the best overall configuration obtained at $\lambda = 100$ and $\alpha = 0.3$. These findings suggest that strengthening the graph-enhanced routing signal can improve the effectiveness of expert selection, while $\alpha$ mainly serves as a secondary control for balancing self-preservation and cross-expert aggregation.\\
+Overall, the results support the central claim that expert selection alone is insufficient for MoE-based continual learning. By enabling experts to communicate through a learned graph, MoCE provides a more structured and adaptive routing mechanism for continual adaptation in vision-language models. Future work can further investigate more expressive graph construction strategies, dynamic expert expansion, and broader evaluation on additional vision-language continual learning tasks.
+
+
+\newpage
+\bibliographystyle{plainnat}
+\IfFileExists{ijcai19.bib}{%
+  \bibliography{ijcai19}%
+}{%
+  \bibliography{ijcai19}%
+}
+\end{document}
