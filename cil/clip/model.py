@@ -736,6 +736,9 @@ class ResidualAttentionBlock(nn.Module):
         return gates, load, full_gates
 
     def forward(self, x: torch.Tensor):
+        # CLIP.forward sets this per call.  The old constructor-time copy stayed
+        # True forever, which accidentally kept noisy routing enabled at eval.
+        self.is_train = bool(global_is_train)
         x = x + self.attention(self.ln_1(x))
         if global_taskid is not None:
             # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
@@ -839,6 +842,16 @@ class ResidualAttentionBlock(nn.Module):
                 y_output = y_output.reshape(x.shape[1], x.shape[0], x.shape[2])  # [B, L, D]
             
             # Track expert usage
+            if not self.is_train:
+                # Exposed transiently for routing_analysis.RoutingAnalyzer.
+                # The analyzer aggregates these tensors immediately and clears
+                # the attribute, keeping evaluation memory bounded.
+                self._last_routing_diagnostics = {
+                    "gates": gates.detach(),
+                    "routing_weights": full_gates.detach(),
+                    "load": load.detach(),
+                    "effective_top_k": int(effective_top_k),
+                }
             importance = gates.sum(0)
             nonzero_indices = torch.nonzero(gates)
             counter = Counter(nonzero_indices[:, 1].tolist())

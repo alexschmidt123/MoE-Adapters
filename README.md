@@ -44,6 +44,27 @@ Input x [L, B, D]
 
 Set `graph_mixer_enabled: true` in your config. Implemented in `cil/graph_mixer_proper.py` and `cil/clip/model.py`.
 
+### Routing-behavior analysis
+
+Enable evaluation-time analysis with:
+
+```yaml
+routing_analysis_enabled: true
+routing_analysis_dir: routing_analysis
+routing_analysis_sample_limit: 2000
+```
+
+For a config that does not contain these keys, Hydra users can enable it with
+`+routing_analysis_enabled=true` on the command line.
+
+Each run then writes `expert_routing_summary.csv`, `graph_neighborhoods.csv`,
+compressed routing tensors, and four figures showing expert selection,
+utilization, routing weights, and graph neighborhoods. Statistics are grouped by
+incremental task and visual-transformer layer; routing capture is disabled during
+training and does not change model outputs. CSV rows also include
+`evaluation_stage`, enabling task-to-task routing drift analysis after each new
+task is learned.
+
 ## Running CIL
 
 ### Quick Start

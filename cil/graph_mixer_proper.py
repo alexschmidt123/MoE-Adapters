@@ -185,6 +185,12 @@ class ProperGraphExpertMixer(nn.Module):
             eye = torch.eye(N, device=A.device, dtype=A.dtype).unsqueeze(0).expand(B, -1, -1)
             A = self.identity_bias_alpha * eye + (1.0 - self.identity_bias_alpha) * A
 
+        # Evaluation diagnostics.  Keep only a detached reference to the most
+        # recent batch; RoutingAnalyzer consumes and clears it after the CLIP
+        # forward pass, so this does not retain an autograd graph.
+        if not is_train:
+            self._last_adjacency = A.detach()
+
         # 3. Multi-layer message passing
         Y = node_features  # [B, N, hidden_dim]
         for i, gnn_layer in enumerate(self.gnn_layers):

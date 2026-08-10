@@ -59,6 +59,17 @@ class ClassIncremental(nn.Module):
         self.current_class_names = []
         self.text_tokens = None
         self.dynamic_dataset = DynamicDataset(cfg)
+        self.routing_analyzer = None
+        self.routing_evaluation_stage = None
+        if bool(getattr(cfg, "routing_analysis_enabled", False)):
+            from routing_analysis import RoutingAnalyzer
+            output_dir = getattr(cfg, "routing_analysis_dir", "routing_analysis")
+            sample_limit = int(getattr(cfg, "routing_analysis_sample_limit", 2000))
+            self.routing_analyzer = RoutingAnalyzer(output_dir, sample_limit)
+
+    def _collect_routing(self, task_id):
+        if self.routing_analyzer is not None:
+            self.routing_analyzer.collect(self.model, task_id, self.routing_evaluation_stage)
 
     def forward(self, image, taskid):
         with torch.no_grad():
@@ -77,6 +88,7 @@ class ClassIncremental(nn.Module):
                     indices_list.append(mask.nonzero(as_tuple=True)[0])
                     img_t = image[mask]
                     logits_t, _ = self.model(img_t, self.text_tokens, t_int, is_train=False)
+                    self._collect_routing(t_int)
                     logits_list.append(logits_t)
                 # Reorder to original batch order (same order as taskid)
                 logits_per_image = torch.zeros(
@@ -88,6 +100,7 @@ class ClassIncremental(nn.Module):
                 tid = int(taskid.item()) if isinstance(taskid, torch.Tensor) else int(taskid)
                 tid = min(tid, num_tasks - 1)
                 logits_per_image, _ = self.model(image, self.text_tokens, tid, is_train=False)
+                self._collect_routing(tid)
             probs = logits_per_image.softmax(dim=-1)
         return probs
 
@@ -280,4 +293,3 @@ def load_model(cfg: DictConfig, device: torch.device) -> nn.Module:
             `{cfg.scenarios}` is not a valid scenario, 
             Please choose from ['class', "domain', 'task-agnostic']
         """)
-

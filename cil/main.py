@@ -152,6 +152,8 @@ def continual_clip(cfg: DictConfig) -> None:
         model.adaptation(task_id, cfg, train_dataset, train_classes_names)  # task id 已经传入model
 
         eval_loader = DataLoader(eval_dataset[:task_id + 1], batch_size=64)
+        if getattr(model, "routing_analyzer", None) is not None:
+            model.routing_evaluation_stage = task_id
         # Uneven scenario: eval dataset returns task-local labels per subset, but model
         # outputs logits over global class indices. Remap targets to global for correct accuracy.
         use_uneven = getattr(cfg, "task_sizes", None) is not None
@@ -192,6 +194,9 @@ def continual_clip(cfg: DictConfig) -> None:
         with open(cfg.log_path, 'a+') as f:
             f.write(json.dumps(log_entry) + '\n')
             metric_logger.end_task()
+        # Persist partial analysis after every stage, not only at run end.
+        if getattr(model, "routing_analyzer", None) is not None:
+            model.routing_analyzer.export()
         # assert 1 == 2
     with open(cfg.log_path, 'a+') as f:
         summary = {
@@ -201,6 +206,10 @@ def continual_clip(cfg: DictConfig) -> None:
         if getattr(cfg, 'task_sizes', None) is not None:
             summary['task_sizes'] = list(cfg.task_sizes)
         f.write(json.dumps(summary) + '\n')
+
+    if getattr(model, "routing_analyzer", None) is not None:
+        analysis_dir = model.routing_analyzer.export()
+        print(f"Routing analysis saved to: {analysis_dir}")
 
         
 
