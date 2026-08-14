@@ -1,4 +1,4 @@
-# smoke test K_g=1 (graph_adj_top_m=2), 2 tasks x 1 epoch, λ=1 α=0.3
+# 08132026_uneven_tinyimagenet_ts28-19-13-11-8-6-5-4-3-3_N16_Kg-lam-alpha-grid: GoE L1-H512-Head512 N=16, K_g=2, λ=1.0, α=0.0. 10 tasks, uneven task_sizes [28, 19, 13, 11, 8, 6, 5, 4, 3, 3] (sum 100); class_order tinyimagenet100.yaml. Run: --config-name 08132026_uneven_tinyimagenet_ts28-19-13-11-8-6-5-4-3-3_N16_Kg-lam-alpha-grid/s10-GoE-L1-H512-Head512-N16-Kg2-lam1-a00-ts28-19-13-11-8-6-5-4-3-3
 
 hydra:
   run:
@@ -21,23 +21,18 @@ prompt_template: "a bad photo of a {}."
 batch_size: 32
 scenario: "class"
 dataset: "tinyimagenet"
-task_sizes: [50, 50]
+task_sizes: [28, 19, 13, 11, 8, 6, 5, 4, 3, 3]
 
 weight_decay: 0.0
 l2: 0
 ce_method: 0
-method: "MoE-Adapters-N8-GoE"
+method: "MoE-Adapters-N16-GoE"
 lr: 1e-3
 ls: 0.0
-epochs: 1
-save_training_loss_csv: true
-training_loss_csv: "training_loss.csv"
-routing_analysis_enabled: true
-routing_analysis_dir: "routing_analysis"
-routing_analysis_sample_limit: 2000
+epochs: 15
 
 model:
-  num_experts: 8
+  num_experts: 16
   top_k: 2
   task_adaptive_top_k_base: 10
   task_adaptive_top_k_step: 5
@@ -57,6 +52,6 @@ model:
   goe_route_from_per_expert: true
   goe_freeze_gnn_after_task: -1
   goe_residual_lambda: 1.0
-  graph_identity_bias_alpha: 0.3
-  graph_adj_top_m: 2
+  graph_identity_bias_alpha: 0.0
+  graph_adj_top_m: 3
   moe_router_z_loss_weight: 0.0001
