@@ -18,6 +18,45 @@ from clip.tokenizer import SimpleTokenizer as _Tokenizer
 __all__ = ["available_models", "load", "tokenize"]
 _tokenizer = _Tokenizer()
 
+# MoE/GoE adapters attach to CLIP ViT residual blocks.
+# Keep this list to ViT backbones that share that path.
+DEFAULT_BACKBONE = "ViT-B/16"
+SUPPORTED_BACKBONES = ("ViT-B/16", "ViT-B/32")
+
+_BACKBONE_ALIASES = {
+    "vit-b/16": "ViT-B/16",
+    "vit-b-16": "ViT-B/16",
+    "vitb16": "ViT-B/16",
+    "vit_b_16": "ViT-B/16",
+    "vit-b/32": "ViT-B/32",
+    "vit-b-32": "ViT-B/32",
+    "vitb32": "ViT-B/32",
+    "vit_b_32": "ViT-B/32",
+}
+
+
+def resolve_backbone(model_name=None) -> str:
+    """Resolve CLIP backbone name; default ViT-B/16, also supports ViT-B/32."""
+    if model_name is None or model_name == "" or model_name == "None":
+        return DEFAULT_BACKBONE
+    name = str(model_name).strip()
+    canonical = _BACKBONE_ALIASES.get(name.lower(), name)
+    if canonical not in SUPPORTED_BACKBONES:
+        raise ValueError(
+            f"Unsupported backbone `{model_name}`. "
+            f"Choose from {list(SUPPORTED_BACKBONES)} (default: {DEFAULT_BACKBONE})."
+        )
+    return canonical
+
+
+def get_model_name(cfg, default: str = DEFAULT_BACKBONE) -> str:
+    """Read `model_name` from config with default and alias normalization."""
+    raw = getattr(cfg, "model_name", None)
+    if raw is None or raw == "" or raw == "None":
+        return resolve_backbone(default)
+    return resolve_backbone(raw)
+
+
 def get_class_order(file_name: str) -> list:
     """Load class_order list from YAML file."""
     with open(file_name, "r+") as f:

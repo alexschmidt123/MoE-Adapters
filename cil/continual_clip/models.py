@@ -53,7 +53,11 @@ class ClassIncremental(nn.Module):
                 cfg.model = OmegaConf.create({})
         with open_dict(cfg.model):
             cfg.model.num_tasks = num_tasks
-        self.model, self.transforms, _ = clip.load(cfg.model_name, device=device, jit=jit, cfg=cfg)
+        backbone = utils.get_model_name(cfg)
+        with open_dict(cfg):
+            cfg.model_name = backbone
+        print(f"Backbone: {backbone}")
+        self.model, self.transforms, _ = clip.load(backbone, device=device, jit=jit, cfg=cfg)
         self.ref_model = None
         self.class_ids_per_task = list(get_class_ids_per_task(cfg))
         self.current_class_names = []

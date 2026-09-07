@@ -84,6 +84,23 @@ def available_models() -> List[str]:
     """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
 
+
+def _normalize_model_name(name: str) -> str:
+    """Map common aliases to canonical CLIP checkpoint names."""
+    aliases = {
+        "vit-b/16": "ViT-B/16",
+        "vit-b-16": "ViT-B/16",
+        "vitb16": "ViT-B/16",
+        "vit_b_16": "ViT-B/16",
+        "vit-b/32": "ViT-B/32",
+        "vit-b-32": "ViT-B/32",
+        "vitb32": "ViT-B/32",
+        "vit_b_32": "ViT-B/32",
+    }
+    key = str(name).strip()
+    return aliases.get(key.lower(), key)
+
+
 # def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_available() else "cpu", jit: bool = False, download_root: str = None):
 #     """Load a CLIP model
 
@@ -205,6 +222,7 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
     preprocess : Callable[[PIL.Image], torch.Tensor]
         A torchvision transform that converts a PIL image into a tensor that the returned model can take as its input
     """
+    name = _normalize_model_name(name)
     if name in _MODELS:
         model_path = _download(_MODELS[name])
     elif os.path.isfile(name):

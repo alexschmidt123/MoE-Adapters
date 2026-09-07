@@ -15,7 +15,8 @@ class DynamicDataset():
     def __init__(self, cfg):
         self.ref_database = {}  # all data key = dataset_name; value is 4D tensor (num_image, 3, 224, 224)
         self.ref_names = [] # collect the name of the dataset 
-        self.ref_model, _, self.test_preprocess = clip.load(cfg.model_name, jit=False)
+        backbone = utils.get_model_name(cfg)
+        self.ref_model, _, self.test_preprocess = clip.load(backbone, jit=False)
         self.cur_dataset = None
         self.memory_size = 5000
         self.batch_id = 0
