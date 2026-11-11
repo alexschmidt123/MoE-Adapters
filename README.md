@@ -167,3 +167,7 @@ MoE-Adapters/
 │   └── clip/     # CLIP model with MoE
 └── datasets/     # Dataset storage (shared)
 ```
+
+## Rebuttal code and analysis handoff
+
+See [the rebuttal to-do list](REBUTTAL_TODO.md) and [reproduction instructions](REPRODUCE_MOCE.md) for running on another PC.
