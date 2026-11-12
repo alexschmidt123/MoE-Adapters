@@ -170,4 +170,4 @@ MoE-Adapters/
 
 ## Rebuttal code and analysis handoff
 
-See [the rebuttal to-do list](REBUTTAL_TODO.md) and [reproduction instructions](REPRODUCE_MOCE.md) for running on another PC.
+See the [reviewer experiment checklist](REVIEWER_EXPERIMENT_TODO.md) for the current UbuntuPC protocol, validation status, required analyses, and remaining work.
