@@ -454,6 +454,8 @@ class ResidualAttentionBlock(nn.Module):
             self.moe_router_z_loss_weight = 0.0
             self.task_adaptive_top_k_step = 5
             self.task_adaptive_top_k_base = 10
+        self.execution_budget_policy = str(getattr(getattr(cfg, 'model', None), 'execution_budget_policy', 'legacy'))
+        self.fair_router_regularization = bool(getattr(getattr(cfg, 'model', None), 'fair_router_regularization', False))
         # Default bottleneck size (used for homogeneous experts or as fallback)
         self.ffn_num = 64  # Bottleneck size fixed at 64 for homogeneous case
         self.softmax = nn.Softmax(1)
@@ -489,67 +491,68 @@ class ResidualAttentionBlock(nn.Module):
                                     )
             self.adaptmlp_list.append(self.adaptmlp)
 
-        # Graph-over-Experts (GoE) mixer configuration - PROPER STRUCTURE
-        if cfg is not None and hasattr(cfg, 'model'):
-            self.graph_enabled = getattr(cfg.model, 'graph_mixer_enabled', False)
-            if self.graph_enabled:
-                import graph_mixer_proper
-                # Helper to get list from config (None if not present)
-                def get_list_attr(cfg_obj, attr_name, default=None):
-                    val = getattr(cfg_obj, attr_name, default)
-                    if val is None or val == "None":
-                        return None
-                    if hasattr(val, '__iter__') and not isinstance(val, str):
-                        return list(val)
-                    return val
-                self.goe_residual_alpha = float(getattr(cfg.model, 'goe_residual_alpha', 0.0))
-                # GNN: Input → GNN (all N experts) → Router → Experts → Output (no coarse router)
-                self.graph_mixer = graph_mixer_proper.ProperGraphExpertMixer(
-                    d_model=d_model,
-                    num_experts=self.experts_num,
-                    num_layers=int(getattr(cfg.model, 'graph_num_layers', 2)),
-                    hidden_dim=int(getattr(cfg.model, 'graph_hidden_dim', d_model)),
-                    symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
-                    add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
-                    activation=str(getattr(cfg.model, 'graph_activation', 'gelu')),
-                    dropout=float(getattr(cfg.model, 'graph_dropout', 0.0)),
-                    layer_norm=bool(getattr(cfg.model, 'graph_layer_norm', True)),
-                    residual=bool(getattr(cfg.model, 'graph_residual', True)),
-                    graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
-                    graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
-                    graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
-                    identity_bias_alpha=float(getattr(cfg.model, 'graph_identity_bias_alpha', 0.0)),
-                    adj_top_m=getattr(cfg.model, 'graph_adj_top_m', None),
-                )
-                self.use_proper_gnn = True
-                # Per-expert routing: logits Z[b,i] from Y[b,i] via goe_router_w [N, H] per task
-                graph_hidden_dim = self.graph_mixer.hidden_dim
-                self.goe_router_w_list = nn.ParameterList()
-                for _ in range(self.step):
-                    self.goe_router_w_list.append(
-                        nn.Parameter(torch.randn(self.experts_num, graph_hidden_dim) * 0.02, requires_grad=True)
+        with torch.random.fork_rng(devices=[], enabled=bool(getattr(getattr(cfg, 'model', None), 'paired_initialization', False))):
+            # Graph-over-Experts (GoE) mixer configuration - PROPER STRUCTURE
+            if cfg is not None and hasattr(cfg, 'model'):
+                self.graph_enabled = getattr(cfg.model, 'graph_mixer_enabled', False)
+                if self.graph_enabled:
+                    import graph_mixer_proper
+                    # Helper to get list from config (None if not present)
+                    def get_list_attr(cfg_obj, attr_name, default=None):
+                        val = getattr(cfg_obj, attr_name, default)
+                        if val is None or val == "None":
+                            return None
+                        if hasattr(val, '__iter__') and not isinstance(val, str):
+                            return list(val)
+                        return val
+                    self.goe_residual_alpha = float(getattr(cfg.model, 'goe_residual_alpha', 0.0))
+                    # GNN: Input → GNN (all N experts) → Router → Experts → Output (no coarse router)
+                    self.graph_mixer = graph_mixer_proper.ProperGraphExpertMixer(
+                        d_model=d_model,
+                        num_experts=self.experts_num,
+                        num_layers=int(getattr(cfg.model, 'graph_num_layers', 2)),
+                        hidden_dim=int(getattr(cfg.model, 'graph_hidden_dim', d_model)),
+                        symmetrize=getattr(cfg.model, 'graph_symmetrize', True),
+                        add_self_loop=getattr(cfg.model, 'graph_add_self_loop', True),
+                        activation=str(getattr(cfg.model, 'graph_activation', 'gelu')),
+                        dropout=float(getattr(cfg.model, 'graph_dropout', 0.0)),
+                        layer_norm=bool(getattr(cfg.model, 'graph_layer_norm', True)),
+                        residual=bool(getattr(cfg.model, 'graph_residual', True)),
+                        graph_head_layers=get_list_attr(cfg.model, 'graph_head_layers', None),
+                        graph_proto_layers=get_list_attr(cfg.model, 'graph_proto_layers', None),
+                        graph_proj_layers=get_list_attr(cfg.model, 'graph_proj_layers', None),
+                        identity_bias_alpha=float(getattr(cfg.model, 'graph_identity_bias_alpha', 0.0)),
+                        adj_top_m=getattr(cfg.model, 'graph_adj_top_m', None),
                     )
-                self.goe_experts_on_x = bool(getattr(cfg.model, 'goe_experts_on_x', True))
-                self.goe_route_from_per_expert = bool(getattr(cfg.model, 'goe_route_from_per_expert', True))
-                self.goe_freeze_gnn_after_task = int(getattr(cfg.model, 'goe_freeze_gnn_after_task', -1))
-                # Residual logits: Z = Z_base + lambda * Z_graph (lambda scales Z_graph; 0 = baseline only)
-                self.goe_residual_lambda = float(getattr(cfg.model, 'goe_residual_lambda', 1.0))
-                print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}, residual_lambda={self.goe_residual_lambda}")
-                self.alpha_graph = None
-                self.graph_entropy_weight = 0.0
+                    self.use_proper_gnn = True
+                    # Per-expert routing: logits Z[b,i] from Y[b,i] via goe_router_w [N, H] per task
+                    graph_hidden_dim = self.graph_mixer.hidden_dim
+                    self.goe_router_w_list = nn.ParameterList()
+                    for _ in range(self.step):
+                        self.goe_router_w_list.append(
+                            nn.Parameter(torch.randn(self.experts_num, graph_hidden_dim) * 0.02, requires_grad=True)
+                        )
+                    self.goe_experts_on_x = bool(getattr(cfg.model, 'goe_experts_on_x', True))
+                    self.goe_route_from_per_expert = bool(getattr(cfg.model, 'goe_route_from_per_expert', True))
+                    self.goe_freeze_gnn_after_task = int(getattr(cfg.model, 'goe_freeze_gnn_after_task', -1))
+                    # Residual logits: Z = Z_base + lambda * Z_graph (lambda scales Z_graph; 0 = baseline only)
+                    self.goe_residual_lambda = float(getattr(cfg.model, 'goe_residual_lambda', 1.0))
+                    print(f"GNN: Processing all {self.experts_num} experts (same workflow for any N); experts_on_x={self.goe_experts_on_x}, route_from_per_expert={self.goe_route_from_per_expert}, residual_lambda={self.goe_residual_lambda}")
+                    self.alpha_graph = None
+                    self.graph_entropy_weight = 0.0
+                else:
+                    self.graph_mixer = None
+                    self.use_proper_gnn = False
+                    self.alpha_graph = None
+                    self.graph_entropy_weight = 0.0
+                    self.goe_residual_alpha = 0.0
             else:
+                self.graph_enabled = False
                 self.graph_mixer = None
                 self.use_proper_gnn = False
                 self.alpha_graph = None
                 self.graph_entropy_weight = 0.0
                 self.goe_residual_alpha = 0.0
-        else:
-            self.graph_enabled = False
-            self.graph_mixer = None
-            self.use_proper_gnn = False
-            self.alpha_graph = None
-            self.graph_entropy_weight = 0.0
-            self.goe_residual_alpha = 0.0
         
         # Attribute to accumulate extra losses (e.g., entropy regularization)
         self.extra_losses = None
@@ -676,6 +679,8 @@ class ResidualAttentionBlock(nn.Module):
         k = min(max(1, k), self.experts_num)
 
         clean_logits = x @ w_gate.to(x)
+        if self.fair_router_regularization and train:
+            self._last_router_logits = clean_logits
         if self.noisy_gating and train:
             raw_noise_stddev = x @ w_noise.to(x)
             noise_stddev = ((self.softplus(raw_noise_stddev) + noise_epsilon))
@@ -743,15 +748,14 @@ class ResidualAttentionBlock(nn.Module):
         if global_taskid is not None:
             # x shape: [L, B, D] where L is sequence length, B is batch size, D is model dim
             x_re = x.permute(1, 0, 2)[:, 0, :]  # Use CLS token: [B, D]
-            # Baseline MoE: always fixed top_k (original behavior, unchanged).
-            # MoE-GNN only: use task-adaptive top_k (more experts for heavier tasks).
-            effective_top_k = self.top_k
-            if (self.graph_enabled and self.graph_mixer is not None and getattr(self, "use_proper_gnn", False)
-                    and global_num_classes_current_task is not None):
-                effective_top_k = min(
-                    self.experts_num,
-                    max(1, self.top_k + (global_num_classes_current_task - self.task_adaptive_top_k_base) // self.task_adaptive_top_k_step)
-                )
+            # Explicit fixed/adaptive controls apply equally with and without graph routing.
+            # Legacy mode retains the historical graph-only adaptive behavior.
+            from reviewer_controls import execution_budget
+            effective_top_k = execution_budget(
+                self.execution_budget_policy, self.top_k, self.experts_num,
+                global_num_classes_current_task, self.task_adaptive_top_k_base,
+                self.task_adaptive_top_k_step,
+                legacy_graph=self.graph_enabled and self.graph_mixer is not None and getattr(self, "use_proper_gnn", False))
             # PROPER STRUCTURE: Input → GNN → Router (from per-expert or pooled) → Experts (on x or x_gnn) → Output
             if self.graph_enabled and self.graph_mixer is not None and hasattr(self, 'use_proper_gnn') and self.use_proper_gnn:
                 # Step 1: GNN processes input; optionally return per-expert states Y [B, N, H] for routing

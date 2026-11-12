@@ -171,3 +171,5 @@ MoE-Adapters/
 ## Rebuttal code and analysis handoff
 
 See the [reviewer experiment checklist](REVIEWER_EXPERIMENT_TODO.md) for the current UbuntuPC protocol, validation status, required analyses, and remaining work.
+
+Portable checkpoint-first reviewer tools: `cil/reviewer_handoff.py` (inventory, manifest and sequential execution), `cil/reviewer_run.py` (strict checkpoint reuse or native training), and `cil/reviewer_analyze.py` (tables and sample figures). Follow [the detailed checklist](REVIEWER_EXPERIMENT_TODO.md) and [validation record](REVIEWER_HANDOFF_VALIDATION.md). No training starts merely by pulling this code.
